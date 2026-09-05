@@ -240,6 +240,56 @@ rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
+# Install iStore app store (luci-app-store)
+#
+# 注意：iStore 官方推荐用 feeds 方式接入（改 feeds.conf.default 后
+# feeds update/install），但本项目 CI 在跑 custom.sh 之前就已经执行完
+# feeds update -a 与 feeds install -a，此时再加 feed 不会生效。
+# 因此这里沿用项目既有的 package/ 克隆方式（与 Aurora 主题、OpenClash 一致）。
+# iStore 的 Makefile 通过 include $(TOPDIR)/feeds/luci/luci.mk 引用 LuCI，
+# 该文件在 feeds install -a 之后已存在，故克隆到 package/ 下可正常编译。
+#
+# iStore 的 Makefile 用 USE_APK="$(CONFIG_USE_APK)" 判断包管理器，
+# 本固件 CONFIG_USE_APK=y，会自动安装 apk 分支（含 apk 商店源与签名公钥）。
+# -------------------------------------------------
+
+echo "Installing iStore app store..."
+
+rm -rf /tmp/istore-src \
+       package/luci-app-store package/luci-lib-taskd \
+       package/luci-lib-xterm package/taskd
+
+if ! git clone \
+    --depth=1 \
+    https://github.com/linkease/istore.git \
+    /tmp/istore-src
+then
+    echo "ERROR: Failed to download iStore!"
+    exit 1
+fi
+
+# iStore 仓库把 4 个包都放在 luci/ 目录下，需一并取出
+cp -r /tmp/istore-src/luci/luci-app-store package/luci-app-store
+cp -r /tmp/istore-src/luci/luci-lib-taskd package/luci-lib-taskd
+cp -r /tmp/istore-src/luci/luci-lib-xterm package/luci-lib-xterm
+cp -r /tmp/istore-src/luci/taskd          package/taskd
+rm -rf /tmp/istore-src
+
+for istore_pkg in luci-app-store luci-lib-taskd luci-lib-xterm taskd; do
+    if [ ! -f "package/$istore_pkg/Makefile" ]; then
+        echo "ERROR: iStore package $istore_pkg Makefile is missing!"
+        exit 1
+    fi
+done
+
+echo "iStore installed successfully."
+
+# 重新扫描包索引，确保 make defconfig 能识别新加入的包
+rm -rf tmp/info 2>/dev/null || true
+rm -f tmp/.packageinfo 2>/dev/null || true
+
+
+# -------------------------------------------------
 # Enable Chinese language
 # -------------------------------------------------
 
