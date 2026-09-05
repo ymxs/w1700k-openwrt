@@ -132,3 +132,28 @@ CONFIG_PACKAGE_kmod-nft-tproxy=y
 CONFIG_PACKAGE_dnsmasq_full_nftset=y
 CONFIG_PACKAGE_nftables-json=y
 # ===== OpenClash 依赖结束 =====
+
+# ===== iStore 应用商店 (luci-app-store) =====
+# 本固件 CONFIG_USE_APK=y（default y），iStore 会据此自动选用 apk 分支
+# 并内置 apk 商店源与签名公钥，无需手动配置源
+CONFIG_USE_APK=y
+# 主包及其自带的 3 个配套包（均来自 linkease/istore 仓库的 luci/ 目录）
+CONFIG_PACKAGE_luci-app-store=y
+CONFIG_PACKAGE_luci-lib-taskd=y
+CONFIG_PACKAGE_luci-lib-xterm=y
+CONFIG_PACKAGE_taskd=y
+# 下列为上述 4 个包 DEPENDS 声明的依赖。
+# 已核实在源码树本体：libuci-lua、liblua、mount-utils、script-utils、procd
+# 来自 packages feed（不在源码树本体，但 CI 会跑 feeds update/install -a 拉入）：
+#   tar、coreutils、coreutils-stty
+# 显式写出以免 defconfig 阶段被丢弃
+CONFIG_PACKAGE_libuci-lua=y
+CONFIG_PACKAGE_liblua=y
+CONFIG_PACKAGE_mount-utils=y
+CONFIG_PACKAGE_script-utils=y
+CONFIG_PACKAGE_coreutils=y
+CONFIG_PACKAGE_coreutils-stty=y
+CONFIG_PACKAGE_tar=y
+CONFIG_PACKAGE_procd=y
+# luci-compat / curl 已在 OpenClash 段落勾选，iStore 同样需要，不重复添加
+# ===== iStore 依赖结束 =====
