@@ -207,6 +207,39 @@ fi
 
 
 # -------------------------------------------------
+# Install OpenClash (luci-app-openclash)
+# -------------------------------------------------
+
+echo "Installing OpenClash..."
+
+rm -rf package/luci-app-openclash
+
+# OpenClash 仓库根目录下是 luci-app-openclash/ 子目录，克隆后单独取出
+if ! git clone \
+    --depth=1 \
+    https://github.com/vernesong/OpenClash.git \
+    /tmp/openclash-src
+then
+    echo "ERROR: Failed to download OpenClash!"
+    exit 1
+fi
+
+cp -r /tmp/openclash-src/luci-app-openclash package/luci-app-openclash
+rm -rf /tmp/openclash-src
+
+if [ ! -f package/luci-app-openclash/Makefile ]; then
+    echo "ERROR: OpenClash was downloaded, but Makefile is missing!"
+    exit 1
+fi
+
+echo "OpenClash installed successfully."
+
+# 重新扫描包索引，确保 make defconfig 能识别新加入的包
+rm -rf tmp/info 2>/dev/null || true
+rm -f tmp/.packageinfo 2>/dev/null || true
+
+
+# -------------------------------------------------
 # Enable Chinese language
 # -------------------------------------------------
 
