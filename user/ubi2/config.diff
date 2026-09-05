@@ -108,3 +108,27 @@ CONFIG_PACKAGE_usteer=y
 CONFIG_PACKAGE_wpad-openssl=y
 # CONFIG_SIGN_EACH_PACKAGE is not set
 # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
+
+# ===== OpenClash (luci-app-openclash) 及其依赖 =====
+# 主包
+CONFIG_PACKAGE_luci-app-openclash=y
+# OpenClash 是 Lua 应用，必须引入 LuCI 的 Lua 兼容运行时
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-lua-runtime=y
+# Makefile DEPENDS 显式要求的依赖（curl 原配置已有）
+# dnsmasq-full 通过 PROVIDES 取代默认 dnsmasq，需显式关掉默认变体
+# CONFIG_PACKAGE_dnsmasq is not set
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_bash=y
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_ip-full=y
+CONFIG_PACKAGE_ruby=y
+CONFIG_PACKAGE_ruby-yaml=y
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_unzip=y
+# Makefile config 段在 firewall4 下自动 default y 的项，显式写出更稳妥
+CONFIG_PACKAGE_kmod-inet-diag=y
+CONFIG_PACKAGE_kmod-nft-tproxy=y
+CONFIG_PACKAGE_dnsmasq_full_nftset=y
+CONFIG_PACKAGE_nftables-json=y
+# ===== OpenClash 依赖结束 =====
