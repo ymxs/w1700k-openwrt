@@ -92,6 +92,11 @@ jobs:
           rm -f $fc /tmp/feeds.bak
           cp "$src" $fc || { echo "::error::failed to install feeds.conf from $src"; exit 1; }
           cmp -s "$src" $fc || { echo "::error::installed feeds.conf differs from source $src"; exit 1; }
+          # fanboy's scripts/feeds strips comments with 's/#.+$//', which does NOT
+          # match a bare '#' line (upstream uses 's/#.*//'). A lone '#' would be
+          # mis-parsed as a feed entry and abort the build, so normalize any stray
+          # bare-# lines to blank before running scripts/feeds update/install.
+          sed -i 's/^[[:space:]]*#[[:space:]]*$//' $fc
           cp $fc /tmp/feeds.bak
           echo "--- active feeds.conf (source: $src) ---"
           cat -n $fc
