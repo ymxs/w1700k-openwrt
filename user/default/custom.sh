@@ -290,6 +290,58 @@ rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
+# Install iStoreOS in-tree packages (istoreos-25.12)
+#
+# Clones istoreos/istoreos at the pinned istoreos-25.12 branch and copies
+# its iStoreOS-specific in-tree packages into package/:
+#   package/istoreos-files  - core iStoreOS files: Argon-based UI defaults +
+#                             easepi icons, blockmount auto-mount, fstab LuCI
+#                             menu, first-boot uci-defaults (09_istoreos /
+#                             99_theme ...)
+#   package/diy/dkml        - dynamic kernel module loader/unloader
+#   package/diy/luci-app-ota- LuCI OTA firmware flashing app
+#
+# The wider iStoreOS package ecosystem (jjm2473 packages/luci forks and the
+# openwrt-third feed with luci-theme-argon) is pulled in via
+# user/default/feeds.conf during `scripts/feeds update/install`, which runs
+# before this script.
+# -------------------------------------------------
+
+echo "Installing iStoreOS packages..."
+
+rm -rf /tmp/istoreos-src package/istoreos-files package/diy
+
+if ! git clone \
+    --depth=1 \
+    --branch istoreos-25.12 \
+    https://github.com/istoreos/istoreos.git \
+    /tmp/istoreos-src
+then
+    echo "ERROR: Failed to download iStoreOS!"
+    exit 1
+fi
+
+cp -r /tmp/istoreos-src/package/istoreos-files package/istoreos-files
+mkdir -p package/diy
+cp -r /tmp/istoreos-src/package/diy/dkml package/diy/dkml
+cp -r /tmp/istoreos-src/package/diy/luci-app-ota package/diy/luci-app-ota
+rm -rf /tmp/istoreos-src
+
+for istoreos_pkg in istoreos-files diy/dkml diy/luci-app-ota; do
+    if [ ! -f "package/$istoreos_pkg/Makefile" ]; then
+        echo "ERROR: iStoreOS package $istoreos_pkg Makefile is missing!"
+        exit 1
+    fi
+done
+
+echo "iStoreOS packages installed successfully."
+
+# 重新扫描包索引，确保 make defconfig 能识别新加入的包
+rm -rf tmp/info 2>/dev/null || true
+rm -f tmp/.packageinfo 2>/dev/null || true
+
+
+# -------------------------------------------------
 # Enable Chinese language
 # -------------------------------------------------
 

@@ -111,6 +111,7 @@ jobs:
         - 固件分支：\`ubi2\`
         - 构建时间：$(TZ=Asia/Hong_Kong date '+%Y-%m-%d %H:%M:%S %Z')
         - 固件源码：https://github.com/OpenWRT-fanboy/OpenW1700k
+        - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
         请确认设备为 W1700K，并在刷写前备份当前配置。
@@ -125,6 +126,7 @@ jobs:
         - 固件分支：\`ubi2-oc\`
         - 构建时间：$(TZ=Asia/Hong_Kong date '+%Y-%m-%d %H:%M:%S %Z')
         - 固件源码：https://github.com/OpenWRT-fanboy/OpenW1700k
+        - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
         刷写前请确认设备为 W1700K，并备份当前配置。
@@ -149,10 +151,10 @@ jobs:
       run: |
         if [ "${{ matrix.target }}" = "ubi2" ]; then
           for p in dlcache. cache-${{ matrix.target }}.; do
-            gh cache list --json key,id --jq '.[] | select(.key | startswith("'"$p"'")) | .id' | xargs -r -n1 gh cache delete
+            gh cache list --json key,id --jq '.[] | select(.key | startswith("'"$p"'"))' | .id' | xargs -r -n1 gh cache delete
           done
         else
-          gh cache list --json key,id --jq '.[] | select(.key | startswith("cache-${{ matrix.target }}.")) | .id' | xargs -r -n1 gh cache delete
+          gh cache list --json key,id --jq '.[] | select(.key | startswith("cache-${{ matrix.target }}."))' | .id' | xargs -r -n1 gh cache delete
         fi ||:
 
     - uses: actions/cache/save@main

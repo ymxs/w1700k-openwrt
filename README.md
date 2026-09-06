@@ -11,9 +11,29 @@
 ## ✨ 主要特性
 
 - 🌐 LuCI 及内置应用默认中文
-- 🎨 默认 Aurora LuCI 主题
+- 🏪 整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面，首次启动默认启用
+- 🎨 Aurora LuCI 主题保留，可随时切换
 - 🕐 系统时区：香港（UTC+8）
 - 🌡️ LuCI 首页增加设备温度及风扇转速显示
+
+---
+
+## 🏪 iStoreOS 整合
+
+本项目已整合 [iStoreOS](https://github.com/istoreos/istoreos)（`istoreos-25.12` 分支）：
+
+| 组件 | 来源 | 说明 |
+| --- | --- | --- |
+| `user/default/feeds.conf` | jjm2473/packages、jjm2473/luci（`istoreos-25.12`）、openwrt/routing、jjm2473/openwrt-third | CI 中替换基线仓库默认 feeds，提供完整 iStoreOS 软件包生态（含 `luci-theme-argon`、`luci-app-argon-config`） |
+| iStoreOS 内置包 | istoreos/istoreos（`istoreos-25.12` 分支）的 `package/istoreos-files` 与 `package/diy/{dkml,luci-app-ota}` | 构建时由 `custom.sh` 克隆并拷入源码树（与 Aurora / OpenClash / iStore 商店相同方式，版本锁定在 istoreos-25.12） |
+
+首次启动行为：
+
+- 默认界面切换为 Argon（iStoreOS 风格 + easepi 图标）；Aurora 主题仍可在 LuCI 中切换
+- 时区保持 Asia/Hong_Kong（`99-w1700k-defaults` 在 iStoreOS `09_istoreos` 之后执行，覆盖其默认值）
+- 启用 USB 自动挂载（blockmount）、fstab LuCI 菜单、dkml 内核模块管理、OTA 刷机页面
+
+应用商店（linkease/istore）沿用 `custom.sh` 既有的 package 克隆方式接入，未以 feed 形式重复添加。
 
 ---
 
