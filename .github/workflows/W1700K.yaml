@@ -71,18 +71,29 @@ jobs:
           ln -sf $DK_BIN bin && ln -sf /dlcache dl && ln -sf /stcache staging_dir
           bp=$DK_PROFILE fc=feeds.conf
           # The base-builder image ships a pre-seeded tree whose untracked
-          # feeds.conf survives git reset --hard (upstream only tracks
-          # feeds.conf.default). A silent cp failure used to let that stale file
-          # through, so remove it explicitly and install ours,
-          # failing loudly if anything is off.
+          # feeds.conf is never removed by git reset --hard (the upstream repo
+          # only tracks feeds.conf.default). Install ours deterministically so
+          # that stale file can never be parsed: prefer the profile copy, fall
+          # back to the repo file mounted at $DK_USER/default (always present),
+          # remove any pre-existing tree feeds.conf, verify byte-for-byte with
+          # cmp, and print the active file before running scripts/feeds update.
           echo "--- profile dir ($bp) ---"
           ls -la $bp 2>&1 | head -n 40 || true
-          [ -f "$bp/$fc" ] || { echo "::error::profile feeds.conf missing at $bp/$fc"; exit 1; }
+          src=""
+          if [ -f "$bp/$fc" ]; then
+            src="$bp/$fc"
+          elif [ -f "$DK_USER/default/$fc" ]; then
+            echo "::warning::profile feeds.conf missing at $bp/$fc; using repo default $DK_USER/default/$fc"
+            src="$DK_USER/default/$fc"
+          else
+            echo "::error::feeds.conf not found in profile ($bp) or repo default ($DK_USER/default)"
+            exit 1
+          fi
           rm -f $fc /tmp/feeds.bak
-          cp $bp/$fc $fc || { echo "::error::failed to install profile feeds.conf"; exit 1; }
-          cmp -s "$bp/$fc" $fc || { echo "::error::installed feeds.conf differs from profile copy"; exit 1; }
+          cp "$src" $fc || { echo "::error::failed to install feeds.conf from $src"; exit 1; }
+          cmp -s "$src" $fc || { echo "::error::installed feeds.conf differs from source $src"; exit 1; }
           cp $fc /tmp/feeds.bak
-          echo "--- active feeds.conf ---"
+          echo "--- active feeds.conf (source: $src) ---"
           cat -n $fc
           rm -rf feeds/* &>/dev/null
           # Clone feeds with retries: large anonymous GitHub clones can fail
@@ -178,10 +189,10 @@ jobs:
       run: |
         if [ "${{ matrix.target }}" = "ubi2" ]; then
           for p in dlcache. cache-${{ matrix.target }}.; do
-            gh cache list --json key,id --jq '.[] | select(.key | startswith("'"$p"'"))' | .id' | xargs -r -n1 gh cache delete
+            gh cache list --json key,id --jq '.[] | select(.key | startswith("'"$p"'")) | .id' | xargs -r -n1 gh cache delete
           done
         else
-          gh cache list --json key,id --jq '.[] | select(.key | startswith("cache-${{ matrix.target }}."))' | .id' | xargs -r -n1 gh cache delete
+          gh cache list --json key,id --jq '.[] | select(.key | startswith("cache-${{ matrix.target }}.")) | .id' | xargs -r -n1 gh cache delete
         fi ||:
 
     - uses: actions/cache/save@main
