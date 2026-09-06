@@ -70,7 +70,20 @@ jobs:
           mountpoint $DK_BIN || { echo "::error::not mounted" >&2; exit 1; }
           ln -sf $DK_BIN bin && ln -sf /dlcache dl && ln -sf /stcache staging_dir
           bp=$DK_PROFILE fc=feeds.conf
-          cp $bp/$fc $fc 2>&- && cp $fc /tmp/feeds.bak
+          # The base-builder image ships a pre-seeded tree whose untracked
+          # feeds.conf survives git reset --hard (upstream only tracks
+          # feeds.conf.default). A silent cp failure used to let that stale file
+          # through, so remove it explicitly and install ours,
+          # failing loudly if anything is off.
+          echo "--- profile dir ($bp) ---"
+          ls -la $bp 2>&1 | head -n 40 || true
+          [ -f "$bp/$fc" ] || { echo "::error::profile feeds.conf missing at $bp/$fc"; exit 1; }
+          rm -f $fc /tmp/feeds.bak
+          cp $bp/$fc $fc || { echo "::error::failed to install profile feeds.conf"; exit 1; }
+          cmp -s "$bp/$fc" $fc || { echo "::error::installed feeds.conf differs from profile copy"; exit 1; }
+          cp $fc /tmp/feeds.bak
+          echo "--- active feeds.conf ---"
+          cat -n $fc
           rm -rf feeds/* &>/dev/null
           # Clone feeds with retries: large anonymous GitHub clones can fail
           # transiently (network hiccup / throttling), and a partial clone would
