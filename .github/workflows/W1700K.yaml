@@ -72,8 +72,22 @@ jobs:
           bp=$DK_PROFILE fc=feeds.conf
           cp $bp/$fc $fc 2>&- && cp $fc /tmp/feeds.bak
           rm -rf feeds/* &>/dev/null
-          ./scripts/feeds update -a &>/dev/null || { echo "::error::feeds update failed"; exit 1; }
-          ./scripts/feeds install -a &>/dev/null || { echo "::error::feeds install failed"; exit 1; }
+          # Clone feeds with retries: large anonymous GitHub clones can fail
+          # transiently (network hiccup / throttling), and a partial clone would
+          # poison later attempts, so wipe feeds/ between tries. Output is kept
+          # in /tmp logs so failures are diagnosable instead of swallowed.
+          attempt=0
+          while :; do
+            attempt=$((attempt + 1))
+            ./scripts/feeds update -a > /tmp/feeds-update.log 2>&1 && break
+            echo "::warning::feeds update failed (attempt $attempt of 3); last log lines:"
+            tail -n 60 /tmp/feeds-update.log ||:
+            if [ "$attempt" -ge 3 ]; then
+              echo "::error::feeds update failed"; exit 1
+            fi
+            rm -rf feeds/* &>/dev/null
+          done
+          ./scripts/feeds install -a > /tmp/feeds-install.log 2>&1 || { echo "::error::feeds install failed"; tail -n 60 /tmp/feeds-install.log; exit 1; }
           mv /tmp/feeds.bak $fc &>/dev/null ||:
           cp $bp/config.diff .config
           cp -r $bp/files/ .
