@@ -156,6 +156,10 @@ CONFIG_PACKAGE_coreutils=y
 CONFIG_PACKAGE_coreutils-stty=y
 CONFIG_PACKAGE_tar=y
 CONFIG_PACKAGE_procd=y
+# tar's PACKAGE_TAR_XZ option defaults to y; OpenWrt 25.x kconfig generation
+# propagates that conditional requirement into every package selecting tar, so
+# defconfig drops luci-app-store unless xz-utils is selected as well.
+CONFIG_PACKAGE_xz-utils=y
 # luci-compat / curl 已在 OpenClash 段落勾选，iStore 同样需要，不重复添加
 # ===== iStore 依赖结束 =====
 
