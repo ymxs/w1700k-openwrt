@@ -171,28 +171,43 @@ jobs:
             echo "[$p] staging stamp: $(ls staging_dir/stamp/.$p_installed 2>/dev/null || echo none)"
           done
           make -j$(($(nproc) + 1)) || make -j1 V=s
-          # Verify the iStore app store ipks were actually built. The base-builder
-          # image may redirect build output (BIN_DIR) to an absolute path, and the
-          # pre-seeded tree can keep a stale in-tree bin/ directory, so check both
-          # the host-mounted $DK_BIN/packages and the relative bin/packages, and
-          # print where ipks actually landed before failing.
+          # Verify the iStore app store packages were actually built. This tree
+          # builds with CONFIG_USE_APK=y (default y, see config/Config-build.in),
+          # so package binaries are apk-tools .apk files named <pkg>-<ver>.apk in
+          # bin/packages/<arch>/ instead of opkg .ipk files (see the USE_APK
+          # branch in include/package-pack.mk). Accept either format, plus a hit
+          # in the built image manifest as proof the package reached the rootfs.
+          # Print what actually landed first so any future mismatch is visible.
           echo "--- iStore package verification ---"
           ls -la "$DK_OPENWRT" | head -n 30 || true
           for d in "$DK_BIN/packages" "bin/packages"; do
             if [ -d "$d" ]; then
-              n=$(find "$d" -name "*.ipk" 2>/dev/null | wc -l)
-              echo "--- $d: ${n} ipk(s) ---"
-              find "$d" \( -name "luci-app-store_*.ipk" -o -name "taskd_*.ipk" -o -name "luci-lib-taskd_*.ipk" -o -name "luci-lib-xterm_*.ipk" \) 2>/dev/null | sort || true
+              n=$(find "$d" -type f \( -name "*.ipk" -o -name "*.apk" \) 2>/dev/null | wc -l)
+              echo "--- $d: ${n} package file(s) ---"
+              find "$d" -maxdepth 2 -type f \( -name "luci-app-store*" -o -name "taskd*" -o -name "luci-lib-taskd*" -o -name "luci-lib-xterm*" \) 2>/dev/null | sort || true
             else
               echo "--- $d: (not a directory) ---"
             fi
           done
-          find /bld -maxdepth 6 -name "luci-app-store_*.ipk" 2>/dev/null | head -n 10 || true
+          echo "--- file extensions under $DK_BIN/packages ---"
+          find "$DK_BIN/packages" -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -n 15 || true
+          echo "--- broad search under /bld for luci-app-store files ---"
+          find /bld -maxdepth 7 \( -name "luci-app-store_*" -o -name "luci-app-store-*" \) 2>/dev/null | head -n 10 || true
           ok=1
-          for ipk in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
-            if ! { find "$DK_BIN/packages" -name "${ipk}_*.ipk" 2>/dev/null || true; find bin/packages -name "${ipk}_*.ipk" 2>/dev/null || true; } | grep -q .; then
-              echo "::error::missing iStore package ipk: ${ipk}"
+          for pkg in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
+            hits=$(find "$DK_BIN" -maxdepth 6 -type f \( -name "${pkg}_[^/]*" -o -name "${pkg}-[^/]*" \) 2>/dev/null | sort -u | head -n 5)
+            if [ -z "$hits" ]; then
+              # No package file found; fall back to the built image manifest,
+              # which lists every package installed in the rootfs (opkg "name
+              # version" lines or apk "name/version/arch" lines).
+              hits=$(find "$DK_BIN/targets" -maxdepth 5 -name "*.manifest" 2>/dev/null | xargs -r grep -lE "(^|[[:space:]])${pkg}[/[:space:]]" 2>/dev/null | head -n 3)
+              if [ -n "$hits" ]; then hits="(in image manifest) $hits"; fi
+            fi
+            if [ -z "$hits" ]; then
+              echo "::error::missing iStore package files for ${pkg}"
               ok=0
+            else
+              echo "[${pkg}] found:"; printf '%s\n' "$hits" | sed 's/^/    /'
             fi
           done
           [ "$ok" = 1 ] || exit 1
