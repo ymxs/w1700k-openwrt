@@ -28,7 +28,7 @@ jobs:
       with: {path: "ghcache\nstcache", key: 'cache-${{ matrix.target }}.${{ github.run_id }}', restore-keys: 'cache-${{ matrix.target }}.'}
     - id: dl
       uses: actions/cache/restore@main
-      with: {path: dlcache, key: 'dlcache.${{ matrix.target }}', restore-keys: dlcache.}
+      with: {path: dlcache, key: 'dlcache.${{ github.run_id }}', restore-keys: dlcache.}
 
     - name: Seed caches if missing
       run: |
@@ -100,7 +100,7 @@ jobs:
           sed -i "s/^[[:space:]]*#[[:space:]]*$//" $fc
           cp $fc /tmp/feeds.bak
           echo "--- active feeds.conf (source: $src) ---"
-      cat -n $fc
+          cat -n $fc
           rm -rf feeds/* &>/dev/null
           # Clone feeds with retries: large anonymous GitHub clones can fail
           # transiently (network hiccup / throttling), and a partial clone would
