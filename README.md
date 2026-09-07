@@ -33,7 +33,7 @@
 - 时区保持 Asia/Hong_Kong（`99-w1700k-defaults` 在 iStoreOS `09_istoreos` 之后执行，覆盖其默认值）
 - 启用 USB 自动挂载（blockmount）、fstab LuCI 菜单、dkml 内核模块管理、OTA 刷机页面
 
-应用商店（linkease/istore）沿用 `custom.sh` 既有的 package 克隆方式接入，未以 feed 形式重复添加。
+应用商店（linkease/istore）沿用 `custom.sh` 既有的 package 克隆方式接入，未以 feed 形式重复添加。刷入后在 LuCI 侧边栏可见「应用商店」入口；其运行于 apk 模式（固件内置 `/etc/apk/arch`），软件源来自固件自带的 `distfeeds.list`（OpenWrt snapshot feeds）。
 
 ---
 
