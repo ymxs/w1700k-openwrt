@@ -284,6 +284,17 @@ done
 
 echo "iStore installed successfully."
 
+# Copy the zh-Hans translation for the store menu title into the package so
+# make defconfig registers CONFIG_PACKAGE_luci-i18n-store-zh-cn and the LuCI
+# sidebar shows 应用商店 instead of the English iStore.
+if [ -f "$DK_PROFILE/po/zh_Hans/luci-app-store.po" ]; then
+    mkdir -p package/luci-app-store/po/zh_Hans
+    cp -f "$DK_PROFILE/po/zh_Hans/luci-app-store.po" \
+        package/luci-app-store/po/zh_Hans/luci-app-store.po
+else
+    echo "WARNING: $DK_PROFILE/po/zh_Hans/luci-app-store.po not found; store menu will stay English."
+fi
+
 # 重新扫描包索引，确保 make defconfig 能识别新加入的包
 rm -rf tmp/info 2>/dev/null || true
 rm -f tmp/.packageinfo 2>/dev/null || true
