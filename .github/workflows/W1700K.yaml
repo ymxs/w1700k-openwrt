@@ -151,6 +151,25 @@ jobs:
         docker_exec DK bash -e -c '
           cd $DK_OPENWRT
           export FORCE_UNSAFE_CONFIGURE=1 CCACHE_MAXSIZE=15G CCACHE_SLOPPINESS=file_stat_matches,include_file_mtime,time_macros CCACHE_NOHASHDIR=true CCACHE_COMPILERCHECK=content
+          # The base-builder image ships a pre-seeded tree and stcache persists
+          # staging_dir across runs, so packages whose sources are vendored or
+          # patched at runtime by custom.sh can carry stale build stamps from the
+          # seeding build and be silently skipped (no recompile, no ipk). Force-
+          # clean every such package first so the freshly cloned/patched sources
+          # are actually built and installed into the image.
+          for p in luci-app-store luci-lib-taskd luci-lib-xterm taskd istoreos-files dkml luci-app-ota luci-theme-aurora luci-app-aurora-config luci-app-openclash; do
+            echo "--- force-clean package/$p (vendored sources) ---"
+            make package/$p/clean V=s || echo "::warning::force-clean failed for $p"
+          done
+          # Diagnostics: show the stamp state of the iStore packages before make,
+          # so a silent no-op build can be told apart from a real one.
+          echo "--- pre-make stamp state ---"
+          ls -la .pkgdir 2>/dev/null | head -n 40 || true
+          for p in luci-app-store taskd; do
+            echo "[$p] build_dir: $(ls -d build_dir/target/*/${p}-* 2>/dev/null || echo none)"
+            echo "[$p] pkgdir entries: $(ls .pkgdir/$p 2>/dev/null | wc -l)"
+            echo "[$p] staging stamp: $(ls staging_dir/stamp/.$p_installed 2>/dev/null || echo none)"
+          done
           make -j$(($(nproc) + 1)) || make -j1 V=s
           # Verify the iStore app store ipks were actually built. The base-builder
           # image may redirect build output (BIN_DIR) to an absolute path, and the
