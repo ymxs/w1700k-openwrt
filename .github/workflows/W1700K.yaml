@@ -28,7 +28,7 @@ jobs:
       with: {path: "ghcache\nstcache", key: 'cache-${{ matrix.target }}.${{ github.run_id }}', restore-keys: 'cache-${{ matrix.target }}.'}
     - id: dl
       uses: actions/cache/restore@main
-      with: {path: dlcache, key: 'dlcache.${{ github.run_id }}', restore-keys: dlcache.}
+      with: {path: dlcache, key: 'dlcache.${{ matrix.target }}', restore-keys: dlcache.}
 
     - name: Seed caches if missing
       run: |
@@ -100,7 +100,7 @@ jobs:
           sed -i "s/^[[:space:]]*#[[:space:]]*$//" $fc
           cp $fc /tmp/feeds.bak
           echo "--- active feeds.conf (source: $src) ---"
-          cat -n $fc
+      cat -n $fc
           rm -rf feeds/* &>/dev/null
           # Clone feeds with retries: large anonymous GitHub clones can fail
           # transiently (network hiccup / throttling), and a partial clone would
@@ -152,16 +152,32 @@ jobs:
           cd $DK_OPENWRT
           export FORCE_UNSAFE_CONFIGURE=1 CCACHE_MAXSIZE=15G CCACHE_SLOPPINESS=file_stat_matches,include_file_mtime,time_macros CCACHE_NOHASHDIR=true CCACHE_COMPILERCHECK=content
           make -j$(($(nproc) + 1)) || make -j1 V=s
-          # Verify the iStore app store ipks were actually built into bin/packages.
-          echo "--- iStore packages in bin/packages ---"
-          find bin/packages -name "luci-app-store_*.ipk" -o -name "taskd_*.ipk" -o -name "luci-lib-taskd_*.ipk" -o -name "luci-lib-xterm_*.ipk" | sort || true
-          for ipk in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
-            if ! find bin/packages -name "${ipk}_*.ipk" | grep -q .; then
-              echo "::error::missing iStore package ipk: ${ipk}"
-              exit 1
+          # Verify the iStore app store ipks were actually built. The base-builder
+          # image may redirect build output (BIN_DIR) to an absolute path, and the
+          # pre-seeded tree can keep a stale in-tree bin/ directory, so check both
+          # the host-mounted $DK_BIN/packages and the relative bin/packages, and
+          # print where ipks actually landed before failing.
+          echo "--- iStore package verification ---"
+          ls -la "$DK_OPENWRT" | head -n 30 || true
+          for d in "$DK_BIN/packages" "bin/packages"; do
+            if [ -d "$d" ]; then
+              n=$(find "$d" -name "*.ipk" 2>/dev/null | wc -l)
+              echo "--- $d: ${n} ipk(s) ---"
+              find "$d" \( -name "luci-app-store_*.ipk" -o -name "taskd_*.ipk" -o -name "luci-lib-taskd_*.ipk" -o -name "luci-lib-xterm_*.ipk" \) 2>/dev/null | sort || true
+            else
+              echo "--- $d: (not a directory) ---"
             fi
           done
-          echo "iStore packages verified in bin/packages."
+          find /bld -maxdepth 6 -name "luci-app-store_*.ipk" 2>/dev/null | head -n 10 || true
+          ok=1
+          for ipk in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
+            if ! { find "$DK_BIN/packages" -name "${ipk}_*.ipk" 2>/dev/null || true; find bin/packages -name "${ipk}_*.ipk" 2>/dev/null || true; } | grep -q .; then
+              echo "::error::missing iStore package ipk: ${ipk}"
+              ok=0
+            fi
+          done
+          [ "$ok" = 1 ] || exit 1
+          echo "iStore packages verified."
           staging_dir/host/bin/ccache -d /ghcache -sz ||:
         '
 
