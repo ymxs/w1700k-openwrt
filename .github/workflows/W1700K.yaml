@@ -128,12 +128,17 @@ jobs:
           # package whose Makefile was not indexed in time). Print the relevant
           # selections, then hard-fail so a silent loss is impossible.
           echo "--- iStore package selection after defconfig ---"
-          grep -E "(^CONFIG_|^# CONFIG_)(USE_APK|PACKAGE_luci-app-store|PACKAGE_taskd|PACKAGE_luci-lib-taskd|PACKAGE_luci-lib-xterm|PACKAGE_istoreos-files|PACKAGE_apk-openssl)" .config || true
+          grep -E "(^CONFIG_|^# CONFIG_)(USE_APK|PACKAGE_luci-app-store|PACKAGE_taskd|PACKAGE_luci-lib-taskd|PACKAGE_luci-lib-xterm|PACKAGE_istoreos-files|PACKAGE_apk-openssl|PACKAGE_tar|PACKAGE_xz-utils)" .config || true
           # Diagnostics before failing: show whether the symbol is even defined in
-          # the generated package Kconfig and what it depends on, so an undefined
-          # symbol vs an unsatisfiable dependency can be told apart.
+          # the generated package Kconfig, its full depends/select block, and the
+          # values of the symbols those constraints reference (libc choice from
+          # toolchain/Config.in, curl LDAP option, tar xz option + xz-utils), so an
+          # undefined symbol vs a specific unsatisfiable dependency term can be told
+          # apart in one run.
           echo "--- PACKAGE_luci-app-store definition (tmp/.config-package.in) ---"
-          grep -n -A 8 "config PACKAGE_luci-app-store" tmp/.config-package.in || echo "(PACKAGE_luci-app-store NOT defined in package Kconfig)"
+          grep -n -A 20 "config PACKAGE_luci-app-store" tmp/.config-package.in || echo "(PACKAGE_luci-app-store NOT defined in package Kconfig)"
+          echo "--- iStore kconfig constraint symbol values (.config) ---"
+          grep -E "(^CONFIG_|^# CONFIG_)(USE_MUSL|USE_GLIBC|LIBCURL_LDAP|PACKAGE_TAR_XZ|PACKAGE_xz-utils)" .config || true
           if ! grep -q "^CONFIG_PACKAGE_luci-app-store=y" .config; then
             echo "::error::luci-app-store not selected after defconfig (iStore integration broken)"
             exit 1
@@ -182,7 +187,7 @@ jobs:
         - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
-        请确认设备为 W1700K，并在刷写前备份当前配置。
+        请确认设备为 W1700K，并在刷写前备份 current configuration.
         EOF
         else
           cat > "$RELEASE_NOTES" <<EOF
@@ -197,7 +202,7 @@ jobs:
         - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
-        刷写前请确认设备为 W1700K，并备份当前配置。
+        刷写前请确认设备为 W1700K，并备份 current configuration.
         EOF
         fi
 
