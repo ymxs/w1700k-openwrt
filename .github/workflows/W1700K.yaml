@@ -124,6 +124,15 @@ jobs:
           rm -f files/build_info  # clear build_info pre-seeded in the base-builder image
           bash $DK_PROFILE/custom.sh
           make defconfig; echo "CONFIG_VERSION_NUMBER=${{ matrix.target }}" >> .config
+          # Verify the iStore app store survived defconfig (defconfig can drop a
+          # package whose Makefile was not indexed in time). Print the relevant
+          # selections, then hard-fail so a silent loss is impossible.
+          echo "--- iStore package selection after defconfig ---"
+          grep -E "(^CONFIG_|^# CONFIG_)(USE_APK|PACKAGE_luci-app-store|PACKAGE_taskd|PACKAGE_luci-lib-taskd|PACKAGE_luci-lib-xterm|PACKAGE_istoreos-files|PACKAGE_apk-openssl)" .config || true
+          if ! grep -q "^CONFIG_PACKAGE_luci-app-store=y" .config; then
+            echo "::error::luci-app-store not selected after defconfig (iStore integration broken)"
+            exit 1
+          fi
           make download -j8 || exit 1
         '
 
@@ -133,6 +142,16 @@ jobs:
           cd $DK_OPENWRT
           export FORCE_UNSAFE_CONFIGURE=1 CCACHE_MAXSIZE=15G CCACHE_SLOPPINESS=file_stat_matches,include_file_mtime,time_macros CCACHE_NOHASHDIR=true CCACHE_COMPILERCHECK=content
           make -j$(($(nproc) + 1)) || make -j1 V=s
+          # Verify the iStore app store ipks were actually built into bin/packages.
+          echo "--- iStore packages in bin/packages ---"
+          find bin/packages -name "luci-app-store_*.ipk" -o -name "taskd_*.ipk" -o -name "luci-lib-taskd_*.ipk" -o -name "luci-lib-xterm_*.ipk" | sort || true
+          for ipk in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
+            if ! find bin/packages -name "${ipk}_*.ipk" | grep -q .; then
+              echo "::error::missing iStore package ipk: ${ipk}"
+              exit 1
+            fi
+          done
+          echo "iStore packages verified in bin/packages."
           staging_dir/host/bin/ccache -d /ghcache -sz ||:
         '
 
