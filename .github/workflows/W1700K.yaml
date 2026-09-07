@@ -129,6 +129,11 @@ jobs:
           # selections, then hard-fail so a silent loss is impossible.
           echo "--- iStore package selection after defconfig ---"
           grep -E "(^CONFIG_|^# CONFIG_)(USE_APK|PACKAGE_luci-app-store|PACKAGE_taskd|PACKAGE_luci-lib-taskd|PACKAGE_luci-lib-xterm|PACKAGE_istoreos-files|PACKAGE_apk-openssl)" .config || true
+          # Diagnostics before failing: show whether the symbol is even defined in
+          # the generated package Kconfig and what it depends on, so an undefined
+          # symbol vs an unsatisfiable dependency can be told apart.
+          echo "--- PACKAGE_luci-app-store definition (tmp/.config-package.in) ---"
+          grep -n -A 8 "config PACKAGE_luci-app-store" tmp/.config-package.in || echo "(PACKAGE_luci-app-store NOT defined in package Kconfig)"
           if ! grep -q "^CONFIG_PACKAGE_luci-app-store=y" .config; then
             echo "::error::luci-app-store not selected after defconfig (iStore integration broken)"
             exit 1
