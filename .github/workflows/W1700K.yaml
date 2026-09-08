@@ -190,7 +190,10 @@ jobs:
             fi
           done
           echo "--- file extensions under $DK_BIN/packages ---"
-          find "$DK_BIN/packages" -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn | head -n 15 || true
+          for ext in ipk apk; do
+            echo "  .$ext: $(find "$DK_BIN/packages" -type f -name "*.$ext" 2>/dev/null | wc -l)"
+          done
+          echo "  total regular files: $(find "$DK_BIN/packages" -type f 2>/dev/null | wc -l)"
           echo "--- broad search under /bld for luci-app-store files ---"
           find /bld -maxdepth 7 \( -name "luci-app-store_*" -o -name "luci-app-store-*" \) 2>/dev/null | head -n 10 || true
           ok=1
@@ -207,7 +210,7 @@ jobs:
               echo "::error::missing iStore package files for ${pkg}"
               ok=0
             else
-              echo "[${pkg}] found:"; printf '%s\n' "$hits" | sed 's/^/    /'
+              echo "[${pkg}] found:"; echo "$hits" | sed "s/^/    /"
             fi
           done
           [ "$ok" = 1 ] || exit 1
