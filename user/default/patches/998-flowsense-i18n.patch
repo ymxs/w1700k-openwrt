@@ -94,9 +94,9 @@
  			return;
  		}
  		entries.forEach(function(e) {
-@@ -416,8 +416,8 @@
- 	UNB_SCALE = Math.max(UNB_SCALE, 8);
- 	var unbLit = Math.min(TICKS, Math.round((unbTot / UNB_SCALE) * TICKS));
+@@ -408,8 +408,8 @@
+ 	var total  = bndTot + unbTot;
+ 	var offPct = total > 0 ? Math.round(bndTot / total * 100) : (cs.npuActive ? 100 : 0);
  
 -	var modeText   = mode === 'ap' ? 'AP MODE' : 'ROUTER';
 -	var statusText = cs.npuActive ? 'HW ACCELERATED' : (cs.hwEnabled ? 'NPU IDLE' : 'CPU PATH');
@@ -105,21 +105,18 @@
  	var statusCol  = cs.npuActive ? '#00c8ff' : (cs.hwEnabled ? '#888' : '#ff6b35');
  	var bndColor   = bndTot > 0 ? '#00c8ff' : 'var(--soc-muted)';
  	var unbColor   = unbTot > 0 ? '#ff9800' : 'var(--soc-muted)';
-@@ -473,11 +473,11 @@
- 	p.push('<text x="150" y="113" text-anchor="middle" fill="var(--soc-text)" font-size="9" font-weight="700" font-family="monospace" letter-spacing="2">'+modeText+'</text>');
- 	p.push('<text x="150" y="124" text-anchor="middle" fill="'+statusCol+'" font-size="7" font-family="monospace" letter-spacing="1">'+statusText+'</text>');
- 	p.push('<text x="150" y="144" text-anchor="middle" fill="'+bndColor+'" font-size="22" font-weight="700" font-family="monospace">'+bndTot+'</text>');
--	p.push('<text x="150" y="155" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="2">BND FLOWS</text>');
-+	p.push('<text x="150" y="155" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="2">' + _('BND FLOWS') + '</text>');
- 	p.push('<text x="117" y="175" text-anchor="middle" fill="#00c8ff"  font-size="8" font-family="monospace">v4: '+n4+'</text>');
- 	p.push('<text x="183" y="175" text-anchor="middle" fill="#9c27b0"  font-size="8" font-family="monospace">v6: '+n6+'</text>');
- 	p.push('<text x="150" y="189" text-anchor="middle" fill="'+unbColor+'" font-size="13" font-weight="700" font-family="monospace">'+unbTot+'</text>');
--	p.push('<text x="150" y="200" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="1.5">UNB FLOWS</text>');
-+	p.push('<text x="150" y="200" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="1.5">' + _('UNB FLOWS') + '</text>');
+@@ -448,8 +448,8 @@
+ 	p.push('<text x="150" y="116" text-anchor="middle" fill="var(--soc-text)" font-size="9" font-weight="700" font-family="monospace" letter-spacing="2">' + modeText + '</text>');
+ 	p.push('<text x="150" y="127" text-anchor="middle" fill="' + statusCol + '" font-size="7" font-family="monospace" letter-spacing="1">' + statusText + '</text>');
+ 	p.push('<text x="150" y="159" text-anchor="middle" fill="' + bndColor + '" font-size="30" font-weight="700" font-family="monospace" filter="url(#f-tn4)">' + bndTot + '</text>');
+-	p.push('<text x="150" y="171" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="2">BND FLOWS</text>');
+-	p.push('<text x="150" y="187" text-anchor="middle" fill="' + unbColor + '" font-size="12" font-weight="700" font-family="monospace">' + unbTot + ' <tspan font-size="7" fill="var(--soc-muted)">UNB</tspan></text>');
++	p.push('<text x="150" y="171" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="2">' + _('BND FLOWS') + '</text>');
++	p.push('<text x="150" y="187" text-anchor="middle" fill="' + unbColor + '" font-size="12" font-weight="700" font-family="monospace">' + unbTot + ' <tspan font-size="7" fill="var(--soc-muted)">' + _('UNB') + '</tspan></text>');
+ 	p.push('<text x="120" y="146" text-anchor="middle" fill="#00c8ff" font-size="7.5" font-family="monospace">v4:' + n4 + '</text>');
+ 	p.push('<text x="180" y="146" text-anchor="middle" fill="#9c27b0" font-size="7.5" font-family="monospace">v6:' + n6 + '</text>');
  
- 	return p.join('');
- }
-@@ -577,7 +577,7 @@
+@@ -551,7 +551,7 @@
  	s += sp(sep, divLine) + '\n';
  
  	if (bndTot === 0) {
@@ -128,7 +125,7 @@
  	} else {
  		s += hdrRow();
  		s += sp(sep, divLine) + '\n';
-@@ -592,7 +592,7 @@
+@@ -566,7 +566,7 @@
  	s += sp(sep, divLine) + '\n';
  
  	if (unbTot === 0) {
@@ -137,7 +134,7 @@
  	} else {
  		s += hdrRow();
  		s += sp(sep, divLine) + '\n';
-@@ -651,12 +651,12 @@
+@@ -624,12 +624,12 @@
  function renderModeBanner(dm) {
  	var mode = dm.mode || 'router';
  	var reason = dm.reason || '';
@@ -153,7 +150,7 @@
  		E('span', { 'id': 'mode-banner-status', 'style': 'margin-left:auto;font-size:12px;color:var(--soc-muted)' }, '')
  	]);
  }
-@@ -670,8 +670,8 @@
+@@ -643,8 +643,8 @@
  		return E('div', { 'class': 'alert-item ' + (isErr ? 'alert-error' : 'alert-warning') }, [
  			E('span', { 'class': 'alert-icon' }, isErr ? '\u26A0' : '\u26A1'),
  			E('div', {}, [
@@ -164,7 +161,7 @@
  			])
  		]);
  	});
-@@ -830,10 +830,10 @@
+@@ -803,10 +803,10 @@
  	// West: latency arc
  	'<path id="cp-arc-west" d="'+pWest+'" fill="none" stroke="'+cs.latColor+'" stroke-width="9" stroke-linecap="round" opacity="0.7"/>' +
  	// Quadrant labels — curved textPath following each arc
@@ -177,31 +174,20 @@
 +	'<text font-size="9" font-family="monospace" letter-spacing="1.5" opacity="0.75" id="cp-lbl-east"><textPath href="#tp-east"  startOffset="50%" text-anchor="middle">' + _('INTEGRITY') + '</textPath></text>' +
 +	'<text font-size="9" font-family="monospace" letter-spacing="1.5" opacity="0.75" id="cp-lbl-west"><textPath href="#tp-west"  startOffset="50%" text-anchor="middle">' + _('LATENCY') + '</textPath></text>' +
  	// Latency needle
- 	'<line id="cp-needle" x1="150" y1="150" x2="'+tip[0].toFixed(1)+'" y2="'+tip[1].toFixed(1)+'" stroke="'+cs.latColor+'" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>' +
- 	'<circle id="cp-needle-pivot" cx="150" cy="150" r="4" fill="'+cs.latColor+'" opacity="0.9"/>' +
-@@ -913,7 +913,7 @@
+ 	'<line id="cp-needle" x1="150" y1="224" x2="'+tip[0].toFixed(1)+'" y2="'+tip[1].toFixed(1)+'" stroke="'+cs.latColor+'" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>' +
+ 	'<circle id="cp-needle-pivot" cx="150" cy="224" r="4" fill="'+cs.latColor+'" opacity="0.9"/>' +
+@@ -950,8 +950,8 @@
  
- 	// Colours
- 	var npuStatusCol = cs.npuActive ? '#00c8ff' : (cs.hwEnabled ? '#888' : '#ff6b35');
--	var npuStatus    = cs.npuActive ? 'HW ACCELERATED' : (cs.hwEnabled ? 'NPU IDLE' : 'CPU PATH');
-+	var npuStatus    = cs.npuActive ? _('HW ACCELERATED') : (cs.hwEnabled ? _('NPU IDLE') : _('CPU PATH'));
- 	var npuColor     = offloadPct > 60 ? '#00c8ff' : offloadPct > 30 ? '#f5a623' : '#888';
+ 	// big LOAD readout — centre stage (no needle), load-coloured + unit + offloaded sub-line
+ 	p.push('<text x="150" y="162" text-anchor="middle" font-family="monospace" font-size="34" font-weight="700" fill="' + loadCol + '" filter="url(#f-cn-soft)">' + cpuPct + '</text>');
+-	p.push('<text x="150" y="178" text-anchor="middle" font-family="monospace" font-size="8" letter-spacing="3" fill="var(--soc-muted)">LOAD</text>');
+-	p.push('<text x="150" y="226" text-anchor="middle" font-family="monospace" font-size="7.5" font-weight="600" fill="var(--soc-muted)">' + offloadPct + '% OFFLOADED</text>');
++	p.push('<text x="150" y="178" text-anchor="middle" font-family="monospace" font-size="8" letter-spacing="3" fill="var(--soc-muted)">' + _('LOAD') + '</text>');
++	p.push('<text x="150" y="226" text-anchor="middle" font-family="monospace" font-size="7.5" font-weight="600" fill="var(--soc-muted)">' + offloadPct + '% ' + _('OFFLOADED') + '</text>');
  
- 	var TICKS = 90;
-@@ -966,10 +966,10 @@
- 	if (governor) p.push('<text x="150" y="118" text-anchor="middle" fill="var(--soc-text)" font-size="7" font-family="monospace" letter-spacing="1">'+governor+'</text>');
- 	if (freqMhz)  p.push('<text x="150" y="130" text-anchor="middle" fill="#00cc44" font-size="9" font-weight="700" font-family="monospace">'+freqMhz+' MHz</text>');
- 	p.push('<text x="150" y="148" text-anchor="middle" fill="var(--soc-load)" font-size="22" font-weight="700" font-family="monospace">'+cpuPct+'%</text>');
--	p.push('<text x="150" y="159" text-anchor="middle" fill="var(--soc-load)" font-size="7" font-family="monospace" letter-spacing="2">CPU LOAD</text>');
-+	p.push('<text x="150" y="159" text-anchor="middle" fill="var(--soc-load)" font-size="7" font-family="monospace" letter-spacing="2">' + _('CPU LOAD') + '</text>');
- 	p.push('<text x="150" y="175" text-anchor="middle" fill="'+npuStatusCol+'" font-size="8" font-family="monospace">'+npuStatus+'</text>');
- 	p.push('<text x="150" y="190" text-anchor="middle" fill="'+npuColor+'" font-size="13" font-weight="700" font-family="monospace">'+offloadPct+'%</text>');
--	p.push('<text x="150" y="200" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="1.5">OFFLOADED</text>');
-+	p.push('<text x="150" y="200" text-anchor="middle" fill="var(--soc-muted)" font-size="7" font-family="monospace" letter-spacing="1.5">' + _('OFFLOADED') + '</text>');
- 
- 	// PLE pool — curved textPath at r=91, south arc (CCW 160°→20°), outside the freq ring.
- 	// Matches the "UNB/BND FLOWS" curved-text style used on the WiFi band gauges.
-@@ -1043,11 +1043,11 @@
+ 	return p.join('');
+ }
+@@ -1001,11 +1001,11 @@
  /* ── WiFi Band Tachometers ── */
  function _wifiBandHealth(ws) {
  	var stations = ws ? (ws.stations || 0) : 0;
@@ -216,8 +202,8 @@
 +	return { text: _('GOOD'), color: '#4caf50' };
  }
  
- // WiFi band SPEEDOMETER: orange needle on a fixed 0→band-max MBPS scale (needle = tx+rx byte-rate;
-@@ -1123,7 +1123,7 @@
+ // WiFi band SPEEDOMETER: orange needle on a fixed 0→band-max MBPS scale. Needle = exact tx+rx
+@@ -1096,7 +1096,7 @@
  	// band name + HW-accel status
  	p.push('<text x="150" y="118" text-anchor="middle" font-family="monospace" font-size="10" font-weight="700" letter-spacing="1" fill="' + col + '">' + info.name.toUpperCase() + '</text>');
  	var hwCol = hwOn ? '#00c8ff' : '#666';
@@ -226,7 +212,7 @@
  
  	// needle + hub
  	var nth = theta(mbps), tip = pt(96, nth), a = nth * Math.PI / 180, dx = Math.cos(a), dy = Math.sin(a), px = -dy, py = dx;
-@@ -1276,7 +1276,7 @@
+@@ -1253,7 +1253,7 @@
  	return m[iface] || iface.toUpperCase();
  }
  function _ethSpeed(speed) {
@@ -235,7 +221,7 @@
  	if (speed >= 10000) return '10G';
  	if (speed >= 5000)  return '5G';
  	if (speed >= 2500)  return '2.5G';
-@@ -1337,12 +1337,12 @@
+@@ -1314,12 +1314,12 @@
  	'<text x="16" y="16" fill="'+portClr+'" font-size="12" font-weight="700" font-family="monospace">'+label+'</text>' +
  	'<text x="234" y="16" text-anchor="end" fill="'+portClr+'" font-size="10" font-family="monospace">'+spLbl+'</text>' +
  	'<line x1="12" y1="21" x2="229" y2="21" stroke="#333" stroke-width="0.5"/>' +
@@ -250,7 +236,7 @@
  	'<rect x="30" y="50" width="'+barW+'" height="13" rx="3" fill="var(--soc-border)" opacity="'+dimOp+'"/>' +
  	(rxPct > 0 ? '<rect x="30" y="50" width="'+rxW+'" height="13" rx="3" fill="#ff6b35" opacity="'+dimOp+'"/>' : '') +
  	'<text x="218" y="59" text-anchor="end" fill="var(--soc-text)" font-size="10" font-weight="700" font-family="monospace" opacity="'+dimOp+'">'+rxVal+'</text>' +
-@@ -1375,41 +1375,41 @@
+@@ -1352,41 +1352,41 @@
  	var rawBridgeDrops = bridge.tx_dropped || 0;
  	var bridgeDelta = (_prevBridgeDrops !== null && rawBridgeDrops >= _prevBridgeDrops) ? (rawBridgeDrops - _prevBridgeDrops) : 0;
  	_prevBridgeDrops = rawBridgeDrops;
@@ -305,7 +291,7 @@
  
  	function card(title, val, color, sub) {
  		return E('div', { 'class': 'compass-card' }, [
-@@ -1420,10 +1420,10 @@
+@@ -1397,10 +1397,10 @@
  	}
  
  	return E('div', { 'class': 'compass-cards', 'id': 'compass-cards' }, [
@@ -320,7 +306,7 @@
  	]);
  }
  
-@@ -1446,40 +1446,40 @@
+@@ -1423,40 +1423,40 @@
  	var bridgeDelta2 = (_prevBridgeDrops !== null && rawBridgeDrops2 >= _prevBridgeDrops) ? (rawBridgeDrops2 - _prevBridgeDrops) : 0;
  	_prevBridgeDrops = rawBridgeDrops2;
  
@@ -377,7 +363,7 @@
  /* ── Main View ── */
 --- a/root/usr/libexec/rpcd/luci.airoha_flowsense
 +++ b/root/usr/libexec/rpcd/luci.airoha_flowsense
-@@ -1065,7 +1065,7 @@
+@@ -1241,7 +1241,7 @@
  
  	if [ "${rx_errors:-0}" -gt 0 ]; then
  		[ -n "$alerts" ] && alerts="${alerts},"
@@ -386,7 +372,7 @@
  		alert_count=$((alert_count + 1))
  	fi
  
-@@ -1079,7 +1079,7 @@
+@@ -1255,7 +1255,7 @@
  		# Warn if ping > 60ms with hw offload on (something is wrong)
  		if [ -n "$last_ping" ] && awk "BEGIN{exit !($last_ping > 60)}"; then
  			[ -n "$alerts" ] && alerts="${alerts},"
