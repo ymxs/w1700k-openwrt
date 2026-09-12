@@ -132,6 +132,12 @@ msgstr "CPU 负载"
 msgid "OFFLOADED"
 msgstr "已卸载"
 
+msgid "UNB"
+msgstr "未绑定流"
+
+msgid "LOAD"
+msgstr "负载"
+
 msgid "NO LINK"
 msgstr "无连接"
 
