@@ -84,3 +84,13 @@ GitHub Actions 每日 **香港时间 14:00** 自动构建：
 W1700K-OpenWrt_<构建时间>_r<版本号>
 W1700K-OpenWrt-OC_<构建时间>_r<版本号>
 ```
+
+---
+
+## 🐞 Bug Investigation Report
+
+详见 [BUG_REPORT.md](BUG_REPORT.md)。结论摘要：
+
+- **CI 编译失败**：已修复 — 上游 `OpenW1700k@ubi2` force-push 导致 `998-flowsense-i18n.patch` 无法应用；已在 `c3b007a` 重新适配，CI run #22 全绿，两个固件 Release 已发布。
+- **随机重启**：已定位根因 — DRAM 中存储的 per-CPU 指针 `desc->kstat_irqs` 发生单比特（bit 63）损坏引发的内核 panic；疑似 DRAM 弱位或 OOT 驱动（`mt7996e` WiFi / `airoha_npu` NPU offload）野 DMA 写入。完整寄存器/指令级证据与缓解建议见报告。
+- 次要问题：`system info` localtime 偏差 +8 小时（时区被应用两次）；lan2 链路约每 5–6 分钟闪断一次。
