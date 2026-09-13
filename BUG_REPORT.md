@@ -87,7 +87,7 @@ Code line: `d538d084 a9025bf5 b9403416 f9403400 (b8646802)`
 
 | Offset | Instruction | Decode | Meaning here |
 |---|---|---|---|
-| +0x18 | `d538d084` | unallocated HINT space | NOP |
+| +0x18 | `d538d084` | `MRS X4, TPIDR_EL1` (op0=0b11, op1=0b000, CRn=C13, CRm=C0, op2=0b100; Rt=x4) | loads the per-CPU offset (`__per_cpu_offset[cpu]`) into x4 immediately before use — confirms x4 = TPIDR_EL1 |
 | +0x1c | `a9025bf5` | `STP X21, X22, [SP, #32]` (imm7=bits[21:15]=4 ×8; Rt=[4:0]=21; Rt2=[14:10]=22; Rn=[9:5]=31=SP) | prologue save |
 | +0x20 | `b9403416` | `LDR W22, [X0, #52]` (imm12=bits[21:10]=13 ×4 for W variant → 52) | reads `desc->irq_data.irq` into w22 |
 | +0x24 | `f9403400` | `LDR X0, [X0, #104]` (imm12=13 ×8 for X variant → 104) | reads `desc->kstat_irqs` into x0 — **this load succeeded** |
@@ -98,6 +98,8 @@ Code line: `d538d084 a9025bf5 b9403416 f9403400 (b8646802)`
 - `x4 = ffffffbfff0bd000` — the per-CPU offset read from TPIDR_EL1 (`raw_cpu_ptr(P) = P + __my_cpu_offset`; on arm64 TPIDR_EL1 holds the offset directly, signed ≈ **−256.015 GiB**).
 - Faulting VA: `x0 + x4 (mod 2^64) = 7fffff807fc195b8` — matches the reported fault address exactly.
 - If bit 63 of the stored pointer had been set (`ffffffc080b5c5b8`), the access would land at `ffffff807fc195b8`, which **is** inside the linear map `[PAGE_OFFSET=0xffffff8000000000, PAGE_END=0xffffffc000000000)` for VA_BITS=39 (`PAGE_OFFSET = -(1<<VA_BITS)`, `_PAGE_END(va) = -(1<<(va-1))`).
+- **Valid pointer identity:** `P_orig = ffffffc080b5c5b8 = KIMAGE_VADDR (ffffffc080000000, i.e. MODULES_END) + 0xB5C5B8` — a valid in-image per-CPU pointer. The corrupted value differs from it by **exactly one bit** (`P_orig ^ x0 == 1<<63`).
+- **Physical localization (phys = VA − PAGE_OFFSET):** `desc` (x19) sits at phys `0x1041E00`; the corrupted `kstat_irqs` field is at desc+104 → VA `ffffff8001041e68` → **phys `0x1041E68–0x1041E6F`**. In little-endian byte order the flipped bit (bit 63 = MSB of byte[7]) is at **physical address `0x1041E6F`, bit 7** — a single, specific DRAM cell.
 
 **A single bit-63 flip of the stored `kstat_irqs` pointer is both sufficient and necessary to produce this exact fault.**
 
@@ -108,6 +110,20 @@ The disassembly offsets are ground truth from the binary; the v6.18 source layou
 - **desc+104 = `kstat_irqs`** (`struct irqstat __percpu *`) — the corrupted field; original value ≈ `ffffffc080b5c5b8`.
 
 Since the +0x20 load of desc+52 succeeded, `desc` itself was valid at function entry. The corruption therefore lives in a **stored** field: the per-CPU pointer written into `irq_desc.kstat_irqs`, read back from DRAM by the +0x24 load and dereferenced (with the TPIDR_EL1 offset) by the faulting instruction — exactly what `__kstat_incr_irqs_this_cpu(desc)` → `__this_cpu_inc(desc->kstat_irqs->cnt)` does as the first action of `handle_percpu_devid_irq` (kernel/irq/chip.c).
+
+### Runtime cross-checks (live probes, 2026-09-13)
+Four live probes were run against the running router via the diagmon cron rig (each ~93 s: login → write probe script over `/tmp/aurora_font.tmp` → wait one cron tick → read result → restore round-12 diagmon, hash-verified exact match every time). They confirm the decode and rule out alternative explanations without a live kernel-memory read:
+
+- **x4 is exactly `__per_cpu_offset[3]`.** The per-CPU offset identity comes straight from v6.18 source (`mm/percpu.c`, in `pcpu_embed_first_chunk`):
+  ```c
+  delta = (unsigned long)pcpu_base_addr - (unsigned long)__per_cpu_start;
+  for_each_possible_cpu(cpu)
+      __per_cpu_offset[cpu] = delta + pcpu_unit_offsets[cpu];
+  ```
+  i.e. `off[3] = (pcpu_base_addr - __per_cpu_start) + pcpu_unit_offsets[3]`. These offsets are set once at boot and never change, so the value captured in x4 (`ffffffbfff0bd000`) is still CPU 3's live offset — no `/proc/kcore` read needed. The `MRS X4, TPIDR_EL1` at +0x18 ties this to the register directly: on arm64 TPIDR_EL1 holds `__per_cpu_offset[cpu]`, so x4 = off[3].
+- **No CPU hotplug.** All four CPUs are online/present/possible (`online=0-3`, `present=0-3`, `possible=0-3`, `processor_count=4`), and arch-timer IRQ 11 has fired on every core (CPU0–3 ≈ 9.8 M–12.1 M counts each). CPU 3 is a normal always-on core; at t≈1039.9 s it was simply in its idle loop when its own timer tick ran `handle_percpu_devid_irq` — the "CPU-3-first-idle-loop" oddity is expected, not anomalous.
+- **Single crash, continuous uptime.** Uptime advanced continuously across all probes (47,955 s → 54,677 s → 55,217 s) with no gaps and no BOOT markers ⇒ the captured panic predates the current boot and **no new panic has occurred since**.
+- **No live kernel-memory read is possible on this router.** `/proc/kcore` does not exist (kernel built without `CONFIG_KCORE`) — the silent cause of every earlier empty kcore read. `/proc/kallsyms` is filtered to a 3-field format (`addr type name`, e.g. `ffffffc080016c5c t pcpu_dump_alloc_info`) with only **15 data/bss symbols**; the per-CPU variables (`pcpu_base_addr`, `__per_cpu_offset`, `pcpu_unit_offsets`) and section markers are absent (function symbols only). There is no `/boot/`, `System.map`, or `vmlinux` on the device. Hence the offset identity above must be taken from source, which it is.
 
 ### Conclusion
 Random reboots = recurring kernel panics caused by **bit-63 corruption of a stored per-CPU pointer (`desc->kstat_irqs`) in DRAM**, hit on CPU 3 during arch-timer tick handling while idle. Single-bit flips of stored pointers point to one of:
@@ -141,7 +157,7 @@ Both ramoops partitions truncate the panic dump at ~6.7 KB (`writing error (-28)
 - **No new panics**: mon.log heartbeat continuous from `up=31214.09` to `up=39914.33` (Sep 13 04:35 → 07:00 HKT), no gaps, no BOOT markers; crontab heartbeat line matches (`# HB 1789254000 up=39914.33`, ~11.1 h uptime at probe time).
 - pstore partitions unchanged (same captured panic as analyzed above).
 
-## Evidence files (investigation workspace)
+## Evidence files (workspace)
 - `w1700k_diag4/out_read_pstore1.txt` — full Panic dump (registers, call trace, Code line; key evidence for Bug 2)
 - `w1700k_diag4/r15_*.json`, `r15_probe.ps1` — fresh router probe (mon.log, crontab, pstore copies)
 - `w1700k_diag4/kernel_chip_c.txt` — v6.18 `kernel/irq/chip.c`; `handle_percpu_devid_irq` calls `__kstat_incr_irqs_this_cpu(desc)` first
