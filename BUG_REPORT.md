@@ -122,7 +122,7 @@ Four live probes were run against the running router via the diagmon cron rig (e
   ```
   i.e. `off[3] = (pcpu_base_addr - __per_cpu_start) + pcpu_unit_offsets[3]`. These offsets are set once at boot and never change, so the value captured in x4 (`ffffffbfff0bd000`) is still CPU 3's live offset — no `/proc/kcore` read needed. The `MRS X4, TPIDR_EL1` at +0x18 ties this to the register directly: on arm64 TPIDR_EL1 holds `__per_cpu_offset[cpu]`, so x4 = off[3].
 - **No CPU hotplug.** All four CPUs are online/present/possible (`online=0-3`, `present=0-3`, `possible=0-3`, `processor_count=4`), and arch-timer IRQ 11 has fired on every core (CPU0–3 ≈ 9.8 M–12.1 M counts each). CPU 3 is a normal always-on core; at t≈1039.9 s it was simply in its idle loop when its own timer tick ran `handle_percpu_devid_irq` — the "CPU-3-first-idle-loop" oddity is expected, not anomalous.
-- **Single crash, continuous uptime.** Uptime advanced continuously across all probes (47,955 s → 54,677 s → 55,217 s) with no gaps and no BOOT markers ⇒ the captured panic predates the current boot and **no new panic has occurred since**.
+- **Single crash, continuous uptime.** Uptime advanced continuously across all probes (47,955 s → 54,677 s → 55,217 s) with no BOOT markers; a final read-only re-check at `up=57,736` s (~16 h) confirmed the heartbeat is still continuous — **0 BOOT markers and 0 uptime regressions** across all 434 samples (the only gaps are the brief windows where `/tmp/aurora_font.tmp` was temporarily replaced by a live-probe script). ⇒ the captured panic predates the current boot and **no new panic has occurred since**.
 - **No live kernel-memory read is possible on this router.** `/proc/kcore` does not exist (kernel built without `CONFIG_KCORE`) — the silent cause of every earlier empty kcore read. `/proc/kallsyms` is filtered to a 3-field format (`addr type name`, e.g. `ffffffc080016c5c t pcpu_dump_alloc_info`) with only **15 data/bss symbols**; the per-CPU variables (`pcpu_base_addr`, `__per_cpu_offset`, `pcpu_unit_offsets`) and section markers are absent (function symbols only). There is no `/boot/`, `System.map`, or `vmlinux` on the device. Hence the offset identity above must be taken from source, which it is.
 
 ### Conclusion
@@ -153,8 +153,8 @@ Both ramoops partitions truncate the panic dump at ~6.7 KB (`writing error (-28)
 
 ---
 
-## Current router state (fresh probe, 2026-09-13 04:35–07:00 HKT)
-- **No new panics**: mon.log heartbeat continuous from `up=31214.09` to `up=39914.33` (Sep 13 04:35 → 07:00 HKT), no gaps, no BOOT markers; crontab heartbeat line matches (`# HB 1789254000 up=39914.33`, ~11.1 h uptime at probe time).
+## Current router state (read-only re-check, 2026-09-13 11:57 HKT)
+- **No new panics**: mon.log heartbeat continuous from `up=31214.09` to `up=57735.81` (Sep 13 04:35 → 11:57 HKT, ~16 h); **no BOOT markers and no uptime regressions** across all 434 samples ⇒ no reboot occurred; crontab heartbeat line matches (`# HB 1789271821 up=57735.81`).
 - pstore partitions unchanged (same captured panic as analyzed above).
 
 ## Evidence files (workspace)
