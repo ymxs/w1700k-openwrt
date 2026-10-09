@@ -194,7 +194,7 @@ jobs:
           done
           echo "--- file extensions under $DK_BIN/packages ---"
           for ext in ipk apk; do
-            echo "  .$ext: $(find "$DK_BIN/packages" -type f -name "*.$ext" | wc -l)"
+            echo "  .$ext: $(find "$DK_BIN/packages" -type f -name "*.$ext" 2>/dev/null | wc -l)"
           done
           echo "  total regular files: $(find "$DK_BIN/packages" -type f 2>/dev/null | wc -l)"
           echo "--- broad search under /bld for luci-app-store files ---"
