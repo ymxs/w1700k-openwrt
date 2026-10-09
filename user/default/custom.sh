@@ -115,11 +115,11 @@ then
 fi
 
 if [ ! -f package/luci-app-aurora-config/Makefile ]; then
-    echo "ERROR: Aurora theme was downloaded, but Makefile is missing!"
+    echo "ERROR: Aurora theme configuration app was downloaded, but Makefile is missing!"
     exit 1
 fi
 
-echo "Aurora theme installed successfully."
+echo "Aurora theme configuration app installed successfully."
 
 # 修改 Aurora 菜单式样（默认侧边栏 + 小圆角）
 TPL_DIR="package/luci-app-aurora-config/root/usr/share/aurora/"
