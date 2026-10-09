@@ -6,6 +6,23 @@ echo "=============================================="
 echo "Running custom commands"
 
 # -------------------------------------------------
+# Guard against upstream OpenWrt group-id collisions
+#
+# Upstream added package/system/hardware-support, whose subpackages
+# (audio/video/accel/input/dvb/kvm/printer/scanner/hidraw-support) each
+# declare USERID groups. The iStoreOS packages feed still ships
+# sane-backends (group "scanner") and tvheadend (group "dvb"), so the
+# duplicate group ids abort `make defconfig` with:
+#   id of group <name> collides with that defined in .../hardware-support/Makefile
+# None of the hardware-support subpackages are selected by our .config,
+# so dropping their USERID declarations is safe and unblocks defconfig.
+# -------------------------------------------------
+
+if [ -f package/system/hardware-support/Makefile ]; then
+    sed -i '/^[[:space:]]*USERID:=/d' package/system/hardware-support/Makefile
+fi
+
+# -------------------------------------------------
 # Existing W1700K custom files
 # -------------------------------------------------
 
@@ -98,11 +115,11 @@ then
 fi
 
 if [ ! -f package/luci-app-aurora-config/Makefile ]; then
-    echo "ERROR: Aurora theme configuration app was downloaded, but Makefile is missing!"
+    echo "ERROR: Aurora theme was downloaded, but Makefile is missing!"
     exit 1
 fi
 
-echo "Aurora theme configuration app installed successfully."
+echo "Aurora theme installed successfully."
 
 # 修改 Aurora 菜单式样（默认侧边栏 + 小圆角）
 TPL_DIR="package/luci-app-aurora-config/root/usr/share/aurora/"
