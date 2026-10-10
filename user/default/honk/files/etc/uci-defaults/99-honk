@@ -1,0 +1,6 @@
+#!/bin/sh
+# First boot: enable honk autostart.
+# The shipped config is direct-only, so enabling it costs nothing and lets
+# you verify the eBPF datapath right after flashing.
+/etc/init.d/honk enable
+exit 0

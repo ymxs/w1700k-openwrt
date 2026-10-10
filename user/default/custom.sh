@@ -369,6 +369,37 @@ rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
+# Install honk (eBPF transparent proxy, daeuniverse/honk)
+#
+# honk 是 Rust + eBPF 透明代理（dae 血统，sing-box 风格出站组 +
+# Clash 兼容 API）。上游提供预编译 aarch64 musl 二进制且已内嵌 eBPF
+# object，因此 user/default/honk 只负责下载并校验固定版本的发布二进制，
+# 再包装成 OpenWrt 包 + procd 服务。W1700K 为 aarch64（Airoha AN7581），
+# 与 aarch64-unknown-linux-musl 目标匹配。
+#
+# 真实 datapath 需要内核 >= 6.12（本树构建 6.18）以及 BTF / cgroup-bpf /
+# netns / sched-bpf / nft-queue 支持；这些在 config.diff 里通过
+# CONFIG_KERNEL_* 与 kmod-* 打开，不在这里处理。
+# -------------------------------------------------
+
+echo "Installing honk..."
+
+rm -rf package/honk
+cp -r $DK_PROFILE/honk package/honk
+
+if [ ! -f package/honk/Makefile ]; then
+    echo "ERROR: honk package Makefile is missing!" >&2
+    exit 1
+fi
+
+echo "honk installed successfully."
+
+# 重新扫描包索引，确保 make defconfig 能识别 package/honk
+rm -rf tmp/info 2>/dev/null || true
+rm -f tmp/.packageinfo 2>/dev/null || true
+
+
+# -------------------------------------------------
 # Enable Chinese language
 # -------------------------------------------------
 

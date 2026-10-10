@@ -177,3 +177,27 @@ CONFIG_PACKAGE_dkml=y
 # LuCI OTA firmware flashing app (iStoreOS diy package; curl already selected)
 CONFIG_PACKAGE_luci-app-ota=y
 # ===== iStoreOS integration end =====
+
+# ===== honk integration start =====
+# honk eBPF datapath 所需的内核能力。以下 CONFIG_KERNEL_* 会被
+# kernel-defaults.mk 剥掉 KERNEL_ 前缀后追加进内核 .config，并覆盖
+# target/generic 里默认关闭的 DEBUG_INFO / BTF / NAMESPACES / CGROUPS。
+# 注意：BTF 依赖 !DEBUG_INFO_REDUCED，而 OpenWrt 的 DEBUG_INFO_REDUCED
+# 默认为 y，所以必须显式写成 "is not set"。
+CONFIG_KERNEL_DEBUG_INFO=y
+CONFIG_KERNEL_DEBUG_INFO_BTF=y
+# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
+CONFIG_KERNEL_CGROUPS=y
+CONFIG_KERNEL_CGROUP_BPF=y
+CONFIG_KERNEL_NAMESPACES=y
+CONFIG_KERNEL_NET_NS=y
+# honk 包本体，以及它 DEPENDS 依赖的内核模块（sched/ingress、cls-bpf、
+# veth、nft-queue）。kmod-nft-queue 会自动带入 kmod-nft-core（nft_ct）
+# 与 kmod-nfnetlink-queue（NETFILTER_NETLINK_QUEUE）。
+CONFIG_PACKAGE_honk=y
+CONFIG_PACKAGE_kmod-sched-core=y
+CONFIG_PACKAGE_kmod-sched-bpf=y
+CONFIG_PACKAGE_kmod-veth=y
+CONFIG_PACKAGE_kmod-nft-core=y
+CONFIG_PACKAGE_kmod-nft-queue=y
+# ===== honk integration end =====

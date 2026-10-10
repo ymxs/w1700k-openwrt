@@ -87,6 +87,30 @@ W1700K-OpenWrt-OC_<构建时间>_r<版本号>
 
 ---
 
+## 🧪 honk（eBPF 透明代理，实验性）
+
+固件已内置 [honk](https://github.com/daeuniverse/honk) —— 基于 eBPF 的透明代理（dae 血统，sing-box 风格出站组 + Clash 兼容 API），版本 **v0.0.1.beta.84**（上游预编译 aarch64 musl 二进制，已内嵌 eBPF object）。
+
+- **默认状态**：开机自启；但默认配置为 `direct-only`（`fallback: direct`），**不改变任何流量路径**，仅用于验证 datapath 能正常起来。
+- **配置文件**：`/etc/honk/config.dae`（OpenWrt conffile，sysupgrade 会保留本地修改）
+- **服务控制**：`/etc/init.d/honk {start|stop|restart|reload|enable|disable}`
+- **Clash API**：`127.0.0.1:9091`，external-ui 为 `yacd`
+  - 端口特意避让已内置的 OpenClash（9090）
+  - ⚠️ honk 与 OpenClash **同为透明代理，请勿同时运行**，切换前请先停用另一个
+- **运行时**：数据目录 `/var/lib/honk`；eBPF map 挂载点 `/sys/fs/bpf`（init 脚本会自动挂载 bpffs）
+
+### 内核依赖
+
+honk 真实 datapath 需要内核 ≥ 6.12（本固件为 6.18）以及 BTF / cgroup-bpf / netns / sched-bpf / nft-queue 支持。这些已在两个 `config.diff` 中通过 `CONFIG_KERNEL_*` 打开（含 `CONFIG_KERNEL_DEBUG_INFO_BTF=y` 并显式 `# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set`，否则 BTF 无法启用），同时选中对应 `kmod-*`。
+
+### 升级 honk
+
+编辑 `user/default/honk/Makefile` 的 `PKG_VERSION`（不带 `v` 前缀）与 `PKG_HASH`，同步为新版本号的官方 release `sha256`；两者不一致时会在下载校验阶段直接失败。
+
+> honk 仍属 beta（v0.0.1.beta.84），上游 README 明确不建议用于生产环境，请自行评估风险。
+
+---
+
 ## 🐞 Bug Investigation Report
 
 详见 [BUG_REPORT.md](BUG_REPORT.md)。结论摘要：

@@ -1,0 +1,39 @@
+# honk default config — DIRECT-ONLY.
+#
+# This intentionally changes no traffic path: routing.fallback is "direct",
+# so honk boots and validates its eBPF datapath without hijacking anything.
+# Add your own node/group definitions below and point fallback at a group
+# only after you have verified the service comes up cleanly.
+#
+# Clash API uses 127.0.0.1:9091 to avoid colliding with OpenClash (9090).
+# Do NOT run honk and OpenClash at the same time: both are transparent
+# proxies and will fight over the traffic.
+
+global {
+    wan_interface: auto
+    lan_interface: br-lan
+    data_dir: '/var/lib/honk'
+    log_level: info
+    dial_mode: domain
+    allow_insecure: false
+    auto_config_kernel_parameter: true
+    nfqueue_enable: true
+    tcp_check_url: 'https://www.gstatic.com/generate_204'
+    tcp_check_http_method: HEAD
+    udp_check_dns: 'dns.google.com:53,8.8.8.8,2001:4860:4860::8888'
+    check_interval: 300s
+    check_tolerance: 50ms
+}
+
+routing {
+    fallback: direct
+}
+
+experimental {
+    clash_api {
+        external_controller: '127.0.0.1:9091'
+        external_ui: 'yacd'
+        secret: ''
+        default_mode: 'Rule'
+    }
+}
