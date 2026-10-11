@@ -1,11 +1,19 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=honk
-PKG_VERSION:=0.0.1.beta.84
+
+# Upstream release tag we vendor. apk (USE_APK=y) rejects this tag as a package
+# version: its grammar is digit{.digit}..., so a dotted component may not start
+# with a letter -- "0.0.1.beta.84" fails with
+#   ERROR: info field 'version' has invalid value: package version is invalid
+# So PKG_VERSION below is a sanitized numeric version, while everything that
+# must match upstream (source name, URL, unpack dir) uses the real tag.
+HONK_UPSTREAM_TAG:=v0.0.1.beta.84
+PKG_VERSION:=0.0.1.84
 PKG_RELEASE:=1
 
-PKG_SOURCE:=honk-core-v$(PKG_VERSION)-aarch64-unknown-linux-musl-stock.tar.gz
-PKG_SOURCE_URL:=https://github.com/daeuniverse/honk/releases/download/v$(PKG_VERSION)
+PKG_SOURCE:=honk-core-$(HONK_UPSTREAM_TAG)-aarch64-unknown-linux-musl-stock.tar.gz
+PKG_SOURCE_URL:=https://github.com/daeuniverse/honk/releases/download/$(HONK_UPSTREAM_TAG)
 PKG_HASH:=6dd9d31748ca56a7f69a1ea8d1b9b65c7a0768033b760089147563a2b800703d
 
 PKG_LICENSE:=GPL-3.0-only
@@ -13,8 +21,8 @@ PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=ymxs
 
 # OpenWrt unpacks without stripping components, so point PKG_BUILD_DIR at the
-# tarball's top-level directory honk-core-<ver>-<target>/ directly.
-PKG_BUILD_DIR:=$(BUILD_DIR)/honk-core-v$(PKG_VERSION)-aarch64-unknown-linux-musl-stock
+# tarball's top-level directory honk-core-<tag>-<target>/ directly.
+PKG_BUILD_DIR:=$(BUILD_DIR)/honk-core-$(HONK_UPSTREAM_TAG)-aarch64-unknown-linux-musl-stock
 
 include $(INCLUDE_DIR)/package.mk
 
