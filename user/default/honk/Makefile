@@ -39,18 +39,18 @@ endef
 
 # Prebuilt static musl binary: download + verify + install, nothing to compile.
 define Build/Compile
-  true
+	true
 endef
 
 define Package/honk/install
-  $(INSTALL_DIR) $(1)/usr/bin
-  $(INSTALL_BIN) $(PKG_BUILD_DIR)/honk-core $(1)/usr/bin/honk-core
-  $(INSTALL_DIR) $(1)/etc/honk
-  $(INSTALL_CONF) ./files/etc/honk/config.dae $(1)/etc/honk/config.dae
-  $(INSTALL_DIR) $(1)/etc/init.d
-  $(INSTALL_BIN) ./files/etc/init.d/honk $(1)/etc/init.d/honk
-  $(INSTALL_DIR) $(1)/etc/uci-defaults
-  $(INSTALL_BIN) ./files/etc/uci-defaults/99-honk $(1)/etc/uci-defaults/99-honk
+	$(INSTALL_DIR) $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/honk-core $(1)/usr/bin/honk-core
+	$(INSTALL_DIR) $(1)/etc/honk
+	$(INSTALL_CONF) ./files/etc/honk/config.dae $(1)/etc/honk/config.dae
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./files/etc/init.d/honk $(1)/etc/init.d/honk
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./files/etc/uci-defaults/99-honk $(1)/etc/uci-defaults/99-honk
 endef
 
 define Package/honk/conffiles
