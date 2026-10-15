@@ -87,6 +87,7 @@ install_heartbeat() {
 
 	CT=/etc/crontabs/root
 	[ -f "$CT" ] || : > "$CT"
+	chmod 600 "$CT" 2>/dev/null
 
 	if ! grep -q 'w1700k-heartbeat' "$CT" 2>/dev/null; then
 		printf '%s\n' '* * * * * /usr/sbin/w1700k-heartbeat' >> "$CT"
@@ -94,7 +95,12 @@ install_heartbeat() {
 	fi
 
 	/etc/init.d/cron enabled 2>/dev/null || /etc/init.d/cron enable 2>/dev/null
-	/etc/init.d/cron running 2>/dev/null || /etc/init.d/cron start 2>/dev/null
+
+	# busybox crond does not reliably notice a crontab file that appeared after
+	# it started. Observed on the board: the job sat in /etc/crontabs/root for
+	# 13 minutes with no execution at all, and ran on the next minute as soon
+	# as cron was restarted. Bounce it after (re)writing the file.
+	/etc/init.d/cron restart 2>/dev/null || /etc/init.d/cron start 2>/dev/null
 }
 
 start() {
