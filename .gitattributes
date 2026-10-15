@@ -1,0 +1,4 @@
+# Overlay files are copied verbatim onto the device. CRLF would break shell
+# shebangs and UCI config parsing, so disable all end-of-line translation and
+# store every file byte-for-byte as committed.
+* -text

@@ -1,0 +1,24 @@
+# W1700K platform tuning.
+#
+# Consumed by /etc/init.d/w1700k-cpufreq on every boot.
+
+config cpufreq 'main'
+	# CPU frequency governor to enforce.
+	#
+	# The stock "ubi2" branch already defaults to ondemand. The "ubi2-oc"
+	# branch flips the default to "performance", which pins all four cores
+	# at the highest OPP permanently - including while the router is idle.
+	# That is the worst case for the overclocked voltage table (see below),
+	# so ondemand is enforced here regardless of what the kernel defaults to.
+	option governor 'ondemand'
+
+	# Hard ceiling for scaling_max_freq, in kHz. 0 = no cap.
+	#
+	# "ubi2-oc" overclocks by shifting the frequency-to-OPP mapping up by
+	# 200 MHz while the firmware voltage table stays at its original
+	# frequencies, so every OPP runs undervolted; the top of the table is
+	# the most marginal. 0 keeps upstream behaviour, a value caps it.
+	option max_freq '0'
+
+	# Floor for scaling_min_freq, in kHz. 0 = leave the kernel default.
+	option min_freq '0'

@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# One-minute uptime heartbeat, called from cron.
+#
+# Writes to /tmp (tmpfs) on purpose: a per-minute append to the overlay would
+# be needless flash wear, and the metric that actually matters - how long the
+# previous boot survived before dying - is recovered from the ramoops dump by
+# /etc/init.d/w1700k-crashlog instead.
+#
+
+F=/tmp/w1700k-heartbeat.log
+
+printf '%s up=%s\n' "$(date +%s)" "$(cut -d' ' -f1 /proc/uptime 2>/dev/null)" >> "$F"
+
+n=$(wc -l < "$F" 2>/dev/null)
+if [ -n "$n" ] && [ "$n" -gt 600 ]; then
+	tail -n 300 "$F" > "$F.tmp" 2>/dev/null && mv -f "$F.tmp" "$F" 2>/dev/null
+fi

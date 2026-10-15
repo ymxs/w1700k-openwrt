@@ -41,8 +41,8 @@
 
 | 固件 | 说明 |
 | --- | --- |
-| `ubi2` | 常规版本，使用标准 CPU 工作参数 |
-| `ubi2-oc` | 超频版本，使用项目提供的超频配置 |
+| `ubi2` | 常规版本，使用标准 CPU 工作参数。**推荐日常使用。** |
+| `ubi2-oc` | 超频版本。上游实现为「每个频率比标称电压低 200 MHz 档位」的全程欠压，可能出现随机重启；本仓库已强制 `ondemand` 并把上限收到 1.2 GHz 以降低风险。详见 [BUG_REPORT.md](BUG_REPORT.md) |
 
 ---
 
@@ -116,5 +116,36 @@ honk 真实 datapath 需要内核 ≥ 6.12（本固件为 6.18）以及 BTF / cg
 详见 [BUG_REPORT.md](BUG_REPORT.md)。结论摘要：
 
 - **CI 编译失败**：已修复 — 上游 `OpenW1700k@ubi2` force-push 导致 `998-flowsense-i18n.patch` 无法应用；已在 `c3b007a` 重新适配，CI run #22 全绿，两个固件 Release 已发布。
-- **随机重启**：已定位根因 — DRAM 中存储的 per-CPU 指针 `desc->kstat_irqs` 发生单比特（bit 63）损坏引发的内核 panic；疑似 DRAM 弱位或 OOT 驱动（`mt7996e` WiFi / `airoha_npu` NPU offload）野 DMA 写入。完整寄存器/指令级证据与缓解建议见报告。
+- **随机重启**：**根因已确认并已修复** — `ubi2-oc` 超频分支并非单纯提高频率，而是把 PM-domain 的 PLL 公式从 `500 + state*50` 改成 `700 + state*50`，同时把 DTS 的 OPP 表整体上移 200 MHz，**但 ATF 的电压表没有同步提高**。结果是**每一个频率都在跑「低 200 MHz 档位的电压」= 全程欠压**；又叠加该分支把默认 governor 改成 `performance`，把 4 核永久钉在 1.4 GHz / 欠压上。欠压在这种最边缘状态下产生随机单比特内存翻转，内核在 arch timer tick 路径上读到被破坏的指针后 panic — 即「无故重启」。详见 [BUG_REPORT.md](BUG_REPORT.md) 的 2026-10-15 更新。
 - 次要问题：`system info` localtime 偏差 +8 小时（时区被应用两次）；lan2 链路约每 5–6 分钟闪断一次。
+
+---
+
+## 🛡️ 稳定性守护（本次新增）
+
+针对上述根因新增了两个开机强制执行的守护脚本，**不修改上游任何文件**（避免再次被上游 force-push 打断），只通过本仓库的 overlay 在运行时覆盖：
+
+| 组件 | 作用 |
+| --- | --- |
+| `/etc/init.d/w1700k-cpufreq` | 每次开机强制 governor 与频率限制；结果写入 syslog，`logread -e w1700k-cpufreq` 可查 |
+| `/etc/config/w1700k` | 参数配置。标准版 `governor=ondemand`、不限频 |
+| `ubi2-oc` 专属覆盖 | `governor=ondemand` + `max_freq=1200000`，不再停留在最激进的两个超频档位 |
+| `/etc/init.d/w1700k-crashlog` | 每次开机把 `/sys/fs/pstore` 里幸存的 panic 转储复制到**持久化**的 `/etc/w1700k-crashlog/`，并在 `events.log` 追加一行记录上一轮开机撑到多少秒才崩 |
+| `/usr/sbin/w1700k-heartbeat` | 每分钟心跳，写在 `/tmp`（内存），几乎不增加 flash 擦写 |
+
+想恢复完整 1.4 GHz 超频：`uci set w1700k.cpufreq.max_freq=1400000 && uci commit w1700k && /etc/init.d/w1700k-cpufreq restart`
+
+> ⚠️ 由于 `ubi2-oc` 的每个频率都处于欠压状态（并非只有最高频），限频只能降低边缘程度、无法完全消除风险。**已出现过 panic 的设备建议改用标准版 `ubi2` 固件**作为日常固件。
+
+---
+
+## 🔎 复现与取证
+
+崩溃后无需人工干预即可取证：
+
+```sh
+logread -e w1700k-cpufreq          # 查看当前 governor / 频率是否已生效
+cat /etc/w1700k-crashlog/events.log # 每次重启一行：CRASH(上一轮撑了多久) / BOOT
+ls /etc/w1700k-crashlog/            # 完整 panic 转储（含寄存器与调用栈）
+tail -20 /tmp/w1700k-heartbeat.log  # 最近一分钟级心跳
+```

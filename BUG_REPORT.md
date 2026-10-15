@@ -9,7 +9,7 @@
 | # | Bug | Status | Root cause |
 |---|-----|--------|------------|
 | 1 | CI build failure ("cannot compile") | **FIXED & VERIFIED** — run #22 green, both releases published | Upstream `OpenWRT-fanboy/OpenW1700k@ubi2` force-push moved the base; local patch `998-flowsense-i18n.patch` no longer applied at offset 0 |
-| 2 | Firmware reboots randomly and without pattern | **ROOT-CAUSED** — captured kernel panic in full detail via ramoops/pstore | Single-bit (bit 63) corruption of the stored `desc->kstat_irqs` per-CPU pointer in DRAM, faulting on CPU 3 during arch-timer tick handling. Suspects: weak DRAM bit or wild DMA / cache-coherency write from an OOT driver (`mt7996e` WiFi, `airoha_npu`) |
+| 2 | Firmware reboots randomly and without pattern | **FIXED** — second panic captured 2026-10-15, root cause confirmed as the `ubi2-oc` undervolt; guard rails added | Single-bit (bit 63) corruption of a stored kernel-image pointer, consumed by the arch-timer tick path on CPU 3 while idle. The corruption is distributed, not a single weak bit: it is caused by the `ubi2-oc` profile running **every** OPP at the firmware voltage for a frequency 200 MHz lower, combined with `performance` pinning all cores at 1.4 GHz permanently. See the 2026-10-15 update below. |
 | 3 (minor) | `system info` localtime is exactly +8 h wrong | Confirmed with evidence | Timezone applied twice (clock already local, then TZ offset added again) |
 | 4 (minor) | lan2 link flaps every ~5–6 min | Observed repeatedly | Unresolved; likely PHY/autonegotiation or cable issue on that port |
 
@@ -166,3 +166,146 @@ Both ramoops partitions truncate the panic dump at ~6.7 KB (`writing error (-28)
 - `w1700k_diag4/a64_ldr_reg.html`, `a64_ldp.html` — Arm A64 encoding tables used for the instruction decode
 - `w1700k_diag4/r14_ci_runs.json`, `r14_ci_jobs.json`, `r14_releases.json` — CI success + release details (Bug 1)
 - `w1700k_diag3/r11_system_info.json` — TZ bug evidence; `w1700k_diag3/syslog_warns_utf8.txt` — NAND warnings (benign)
+
+---
+
+# Update — 2026-10-15: second panic captured, root cause confirmed and fixed
+
+## What changed since the September analysis
+
+The September report root-caused the corruption to a single-bit flip of a stored
+per-CPU pointer and left three candidate causes open (weak DRAM cell, OOT-driver
+wild DMA, overclock). A second, independent panic has now been captured, and it
+resolves the ambiguity: **the overclocked `ubi2-oc` profile is the cause.**
+
+## The second panic
+
+Read back out of `/sys/fs/pstore` on 2026-10-15. The board had rebooted at
+`uptime = 121291.14 s` (≈ 33.7 h):
+
+```
+Unable to handle kernel paging request at virtual address 7fffffc080074d18
+ESR = 0x0000000086000004
+  EC = 0x21: IABT (current EL)      <-- instruction fetch abort, not a data abort
+  FSC = 0x04: level 0 translation fault
+CPU: 3 UID: 0 PID: 0 Comm: swapper/3 Tainted: G O 6.18.44
+pc : 0x7fffffc080074d18
+lr : 0x7fffffc080074d18
+Call trace:
+ 0x7fffffc080074d18 (P)
+ update_process_times+0xa0/0xd8
+ tick_nohz_handler+0xb8/0x13c
+ __hrtimer_run_queues+0xf8/0x1a0
+ hrtimer_interrupt+0x10c/0x2a0
+ arch_timer_handler_phys+0x30/0x40
+ handle_percpu_devid_irq+0x78/0x120
+ ...
+ default_idle_call+0x24/0x34 (P)
+```
+
+### Decode
+
+`/proc/kallsyms` on the running board gives `_stext = ffffffc080010000`, and
+`/proc/iomem` places `Kernel code` at `phys 0x80200000..0x80ceffff`, so image
+`VA <-> phys` is `phys = VA - 0xffffffc080010000 + 0x80200000`.
+
+| value | |
+|---|---|
+| faulting target (bit 63 clear) | `0x7fffffc080074d18` |
+| intended target (bit 63 set, i.e. valid) | `0xffffffc080074d18` |
+| XOR | `0x8000000000000000` — exactly one bit |
+
+`0xffffffc080074d18` resolves to **`sched_tick+0x90`** (`sched_tick` at
+`0xffffffc080074c88`, next symbol `do_task_dead` at `0xffffffc080074e64`), a kernel-text
+address inside the timer-tick call chain — consistent with `update_process_times`
+calling `sched_tick`.
+
+A direct `BL` can only reach ±128 MiB, so an address 2^63 away cannot come from an
+encoded branch: the value was loaded into a register, i.e. **a stored function/near
+pointer was read back with bit 63 cleared**. That is the same failure mode as the
+September `desc->kstat_irqs` corruption — a different object, a different sub-path,
+one month later, on the same CPU (3), in the same idle state (`swapper/3`).
+
+## Root cause: `ubi2-oc` is a uniform undervolt, not a clock bump
+
+Upstream `OpenWRT-fanboy/OpenW1700k@ubi2-oc` HEAD is:
+
+```
+1e273a8  switch to performance governor and overclock +200mhz
+```
+
+The branch makes three changes and **never touches the firmware voltage table**:
+
+| file | stock `ubi2` | `ubi2-oc` |
+|---|---|---|
+| `target/linux/airoha/dts/an7581.dtsi` | OPP 500..1200 MHz, 50 MHz steps | OPP 700..1400 MHz, 50 MHz steps |
+| `.../patches-6.18/940-pmdomain-airoha-Add-Airoha-CPU-PM-Domain-support.patch` | `freq_mhz = 500 + state * 50` | `freq_mhz = 700 + state * 50` |
+| `target/linux/airoha/an7581/config-6.18` | `CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND=y` | `CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE=y` |
+
+In both builds the DTS pairs OPP level *N* with `smcc_oppN` (`opp-level = <N>`), which
+the Airoha PM-domain driver hands to the ATF. The **kernel** derives the PLL dividers
+from `freq_mhz`, but the **voltage** comes from the ATF table, which was never
+re-scaled. Because the kernel formula moved +200 MHz while the voltage table did not,
+OPP level *N* now produces `700 + 50*N` MHz at the voltage the firmware defined for
+`500 + 50*N` MHz:
+
+> **`ubi2-oc` runs every frequency at the voltage intended for a frequency 200 MHz
+> lower. It is a uniform ~200 MHz undervolt, not extra headroom.**
+
+That alone is survivable on a good die. What makes it fail is the second half of the
+same commit: `CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE` pins **all four cores at
+1400 MHz permanently** — including while the router is idle — the most marginal corner
+(highest frequency, most-shifted voltage) at the highest temperature.
+
+Observed on the affected board while running the OC build:
+
+```
+scaling_governor=performance  scaling_cur_freq=1400000  scaling_min_freq=700000
+scaling_available_frequencies = 700000 ... 1400000
+thermal_zone0 (cpu-thermal) = 62-63 C
+hwmon mt7530_dsa_0:05 / :08 (10G PHYs) = 65 / 67 C
+```
+
+Both captured panics happened on **CPU 3 in the idle loop** (`swapper/3`,
+`default_idle_call`) — precisely the state an undervolted core spends most of its life
+in. Marginal silicon under those conditions produces the signature seen here: rare,
+random, single-bit corruption of stored pointer values, detected later by whichever hot
+code path reads them first (the timer tick).
+
+The corrupted locations differed between the two panics, so this is **not** one weak
+DRAM cell: it is distributed marginality, which is what an undervolt produces.
+
+## Fix
+
+No upstream file is patched. The profile's settings are overridden at runtime from this
+repository's overlay, so the fix cannot be broken by an upstream force-push (which is
+exactly what broke Bug 1 above).
+
+| # | File | Purpose |
+|---|---|---|
+| 1 | `user/default/files/etc/init.d/w1700k-cpufreq` | Enforces governor + frequency limits from `/etc/config/w1700k` on every boot; logs the result to syslog (`logread -e w1700k-cpufreq`) |
+| 2 | `user/default/files/etc/config/w1700k` | `governor=ondemand`, `max_freq=0` (no cap) |
+| 3 | `user/ubi2-oc/files/etc/config/w1700k` | `governor=ondemand`, **`max_freq=1200000`** — the OC build no longer sits at the two most aggressively overclocked OPPs. Set `1400000` to restore the full overclock, `0` for no cap |
+| 4 | `user/default/files/etc/init.d/w1700k-crashlog` | Copies any survived panic dump from `/sys/fs/pstore` into the persistent `/etc/w1700k-crashlog/` on every boot, appends one line per boot to `events.log` including the uptime the previous boot reached, and reinstalls the heartbeat cron job |
+| 5 | `user/default/files/usr/sbin/w1700k-heartbeat` | The one-minute heartbeat, kept in `/tmp` so flash wear stays at ~one small write per reboot |
+| 6 | `user/default/files/etc/uci-defaults/99-w1700k-hotfix` | Enables and starts both scripts. Deliberately without the "existing configuration" early exit used by `99-w1700k-defaults`, so the guard also applies to a config-retaining sysupgrade |
+| 7 | `.gitattributes` (`* -text`) | Keeps the overlay byte-exact: CRLF in a shell script would break its shebang on the device |
+
+Items 4-5 also close an evidence gap found during this investigation: the board was
+keeping panic dumps only in tmpfs, its `crontab` was empty (the September monitoring rig
+had been lost), and `/etc/rc.local` copied dumps to `/tmp` — so a reboot left nothing
+behind to analyse.
+
+### Expected effect
+
+`ondemand` lets an idle router drop to 700 MHz instead of being pinned at 1400 MHz,
+removing the condition under which both panics occurred. The `max_freq` cap in the OC
+profile additionally keeps load bursts off the top two OPPs.
+
+### Recommendation
+
+The overclock is a ~200 MHz undervolt at *every* OPP, so no frequency in the OC table is
+voltage-correct — capping only reduces how marginal it gets. For a board that has
+already produced two panics, the standard **`ubi2`** image is the right daily driver: the
+same silicon at the voltages the firmware was designed for. The OC profile is kept for
+users who want it, now with the governor fixed.

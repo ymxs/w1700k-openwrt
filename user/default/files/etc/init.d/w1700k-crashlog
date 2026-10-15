@@ -1,0 +1,110 @@
+#!/bin/sh /etc/rc.common
+#
+# W1700K crash forensics.
+#
+# The board has no persistent console, and /tmp is tmpfs, so a kernel panic
+# that hard-resets the SoC leaves no trace at all unless the ramoops/pstore
+# scratch area is copied out during the *next* boot. That is exactly how the
+# panics behind the "random reboots" reports were first captured by hand.
+#
+# On every boot this script:
+#   1. copies any survived panic dump into /etc/w1700k-crashlog/<timestamp>/
+#      (overlay, so it survives reboot and sysupgrade),
+#   2. appends a single line to events.log recording whether a dump was found
+#      and the uptime the previous boot reached before it died,
+#   3. (re)installs the one-minute heartbeat cron job.
+#
+# Flash wear stays at roughly one small append per reboot.
+#
+
+START=95
+STOP=4
+
+CRASHDIR=/etc/w1700k-crashlog
+TAG=w1700k-crashlog
+
+msg() {
+	logger -t "$TAG" "$*"
+	echo "$TAG: $*"
+}
+
+# Copy /sys/fs/pstore to CRASHDIR. Returns 0 when a dump was found.
+save_dumps() {
+	_present=0
+	for _f in /sys/fs/pstore/dmesg-ramoops-*; do
+		[ -f "$_f" ] || continue
+		_present=1
+		break
+	done
+	[ "$_present" = 1 ] || return 1
+
+	_stamp="$(date '+%Y%m%d-%H%M%S')"
+	_d="$CRASHDIR/$_stamp"
+	mkdir -p "$_d" 2>/dev/null
+
+	for _f in /sys/fs/pstore/dmesg-ramoops-*; do
+		[ -f "$_f" ] || continue
+		cp -f "$_f" "$_d/" 2>/dev/null
+	done
+	cp -f /proc/uptime "$_d/uptime-after-boot.txt" 2>/dev/null
+
+	# The last "[<seconds>.<microseconds>]" dmesg prefix in a ramoops dump is
+	# the uptime at which the previous boot stopped.
+	LAST_UPTIME=""
+	for _f in "$_d"/dmesg-ramoops-*; do
+		_v="$(sed -n 's/^<[0-9]*>\[ *\([0-9][0-9]*\.[0-9]*\)\].*/\1/p' "$_f" 2>/dev/null | tail -n 1)"
+		[ -n "$_v" ] && LAST_UPTIME="$_v"
+	done
+
+	DUMPDIR="$_d"
+	msg "panic dump saved to $_d (previous boot reached ${LAST_UPTIME:-unknown}s)"
+	return 0
+}
+
+log_event() {
+	mkdir -p "$CRASHDIR" 2>/dev/null
+	if [ -n "$DUMPDIR" ]; then
+		printf '%s  CRASH  previous_uptime=%ss  dump=%s\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S %Z')" "${LAST_UPTIME:-?}" "$DUMPDIR" \
+			>> "$CRASHDIR/events.log"
+	else
+		printf '%s  BOOT   no panic dump (clean start)\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S %Z')" \
+			>> "$CRASHDIR/events.log"
+	fi
+
+	# Keep the tail bounded so the file cannot grow without limit.
+	_n=$(wc -l < "$CRASHDIR/events.log" 2>/dev/null)
+	if [ -n "$_n" ] && [ "$_n" -gt 500 ]; then
+		tail -n 300 "$CRASHDIR/events.log" > "$CRASHDIR/events.log.tmp" 2>/dev/null \
+			&& mv -f "$CRASHDIR/events.log.tmp" "$CRASHDIR/events.log" 2>/dev/null
+	fi
+}
+
+install_heartbeat() {
+	[ -x /usr/sbin/w1700k-heartbeat ] || return 0
+	mkdir -p /etc/crontabs 2>/dev/null
+
+	CT=/etc/crontabs/root
+	[ -f "$CT" ] || : > "$CT"
+
+	if ! grep -q 'w1700k-heartbeat' "$CT" 2>/dev/null; then
+		printf '%s\n' '* * * * * /usr/sbin/w1700k-heartbeat' >> "$CT"
+		msg "heartbeat cron installed"
+	fi
+
+	/etc/init.d/cron enabled 2>/dev/null || /etc/init.d/cron enable 2>/dev/null
+	/etc/init.d/cron running 2>/dev/null || /etc/init.d/cron start 2>/dev/null
+}
+
+start() {
+	DUMPDIR=""
+	LAST_UPTIME=""
+	save_dumps || true
+	log_event
+	install_heartbeat
+}
+
+stop() {
+	return 0
+}

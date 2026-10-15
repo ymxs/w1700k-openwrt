@@ -1,0 +1,142 @@
+#!/bin/sh /etc/rc.common
+#
+# W1700K CPU frequency guard.
+#
+# Re-applies the governor / frequency limits from /etc/config/w1700k at every
+# boot, so the policy is enforced even if the kernel default governor (which
+# the upstream ubi2-oc branch sets to "performance") or a cpufreq driver
+# reload puts the cores back into the state that causes the random panics.
+#
+
+START=19
+STOP=81
+
+CFG=w1700k
+TAG=w1700k-cpufreq
+
+msg() {
+	logger -t "$TAG" "$*"
+	echo "$TAG: $*"
+}
+
+# Highest available frequency that is <= $2.
+pick_max() {
+	_best=
+	for _f in $(cat "$1/scaling_available_frequencies" 2>/dev/null); do
+		if [ "$_f" -le "$2" ]; then
+			if [ -z "$_best" ] || [ "$_f" -gt "$_best" ]; then
+				_best="$_f"
+			fi
+		fi
+	done
+	[ -n "$_best" ] && echo "$_best"
+}
+
+# Lowest available frequency that is >= $2.
+pick_min() {
+	for _f in $(cat "$1/scaling_available_frequencies" 2>/dev/null); do
+		if [ "$_f" -ge "$2" ]; then
+			echo "$_f"
+			return 0
+		fi
+	done
+}
+
+apply_policy() {
+	_p="$1"
+	[ -d "$_p" ] || return 0
+
+	_name="$(basename "$_p")"
+	_gov="$(uci -q get $CFG.cpufreq.governor)"
+	_maxf="$(uci -q get $CFG.cpufreq.max_freq)"
+	_minf="$(uci -q get $CFG.cpufreq.min_freq)"
+	_avail=" $(cat "$_p/scaling_available_governors" 2>/dev/null) "
+
+	# Frequency limits first, so the governor starts inside the new window.
+	if [ -n "$_maxf" ] && [ "$_maxf" -gt 0 ] 2>/dev/null; then
+		_v="$(pick_max "$_p" "$_maxf")"
+		if [ -z "$_v" ]; then
+			msg "$_name: no available frequency <= $_maxf kHz"
+		elif [ "$_v" != "$(cat "$_p/scaling_max_freq" 2>/dev/null)" ]; then
+			if echo "$_v" > "$_p/scaling_max_freq" 2>/dev/null; then
+				msg "$_name: scaling_max_freq -> $(cat "$_p/scaling_max_freq") kHz"
+			else
+				msg "$_name: FAILED to set scaling_max_freq=$_v"
+			fi
+		fi
+	fi
+
+	if [ -n "$_minf" ] && [ "$_minf" -gt 0 ] 2>/dev/null; then
+		_v="$(pick_min "$_p" "$_minf")"
+		if [ -z "$_v" ]; then
+			msg "$_name: no available frequency >= $_minf kHz"
+		elif [ "$_v" != "$(cat "$_p/scaling_min_freq" 2>/dev/null)" ]; then
+			if echo "$_v" > "$_p/scaling_min_freq" 2>/dev/null; then
+				msg "$_name: scaling_min_freq -> $(cat "$_p/scaling_min_freq") kHz"
+			else
+				msg "$_name: FAILED to set scaling_min_freq=$_v"
+			fi
+		fi
+	fi
+
+	if [ -n "$_gov" ]; then
+		case "$_avail" in
+			*" $_gov "*)
+				if [ "$_gov" != "$(cat "$_p/scaling_governor" 2>/dev/null)" ]; then
+					if echo "$_gov" > "$_p/scaling_governor" 2>/dev/null; then
+						msg "$_name: scaling_governor -> $(cat "$_p/scaling_governor")"
+					else
+						msg "$_name: FAILED to set governor=$_gov"
+					fi
+				fi
+				;;
+			*)
+				msg "$_name: governor '$_gov' unavailable (have:${_avail% })"
+				;;
+		esac
+	fi
+}
+
+# Router load is bursty. A slightly higher up-threshold plus a long
+# sampling_down_factor keeps the cores from hopping to the top OPP on every
+# short packet burst, which is both quieter and further away from the
+# marginal corner of the voltage curve.
+tune_ondemand() {
+	for _d in /sys/devices/system/cpu/cpufreq/policy*/ondemand \
+	          /sys/devices/system/cpu/cpufreq/ondemand; do
+		[ -d "$_d" ] || continue
+		[ -w "$_d/up_threshold" ] && echo 85 > "$_d/up_threshold" 2>/dev/null
+		[ -w "$_d/sampling_down_factor" ] && echo 20 > "$_d/sampling_down_factor" 2>/dev/null
+	done
+}
+
+start() {
+	[ -d /sys/devices/system/cpu/cpufreq ] || {
+		msg "cpufreq sysfs not present, nothing to do"
+		return 0
+	}
+
+	for _p in /sys/devices/system/cpu/cpufreq/policy*; do
+		[ -d "$_p" ] || continue
+		apply_policy "$_p"
+	done
+	tune_ondemand
+
+	# Record the resulting state so `logread -e w1700k-cpufreq` is enough to
+	# tell whether the guard actually took effect.
+	for _p in /sys/devices/system/cpu/cpufreq/policy*; do
+		[ -d "$_p" ] || continue
+		msg "$(basename "$_p"): governor=$(cat "$_p/scaling_governor" 2>/dev/null)" \
+		    "cur=$(cat "$_p/scaling_cur_freq" 2>/dev/null)" \
+		    "min=$(cat "$_p/scaling_min_freq" 2>/dev/null)" \
+		    "max=$(cat "$_p/scaling_max_freq" 2>/dev/null)"
+	done
+}
+
+stop() {
+	return 0
+}
+
+reload() {
+	start
+}

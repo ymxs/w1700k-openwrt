@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Enable the W1700K guard rails on first boot / after upgrade.
+#
+# Deliberately does not take the "existing configuration" early exit that
+# 99-w1700k-defaults uses: this must also run for a config-retaining
+# sysupgrade, where the whole point is to switch an already-installed board
+# away from the "performance" governor.
+#
+
+/etc/init.d/w1700k-cpufreq enable 2>/dev/null
+/etc/init.d/w1700k-cpufreq start 2>/dev/null
+
+/etc/init.d/w1700k-crashlog enable 2>/dev/null
+/etc/init.d/w1700k-crashlog start 2>/dev/null
+
+exit 0
