@@ -226,6 +226,71 @@ pointer was read back with bit 63 cleared**. That is the same failure mode as th
 September `desc->kstat_irqs` corruption — a different object, a different sub-path,
 one month later, on the same CPU (3), in the same idle state (`swapper/3`).
 
+### Third panic — the identical corrupted value reproduces
+
+While the fix was being deployed, the board crashed again (uptime `1390.09 s`, ≈ 23 min,
+i.e. the same ~17-23 min window as the September event). Auto-captured into
+`/etc/w1700k-crashlog/` by the new `w1700k-crashlog` service:
+
+```
+Unable to handle kernel paging request at virtual address 7fffff807fc195b8
+ESR = 0x0000000096000004
+  EC = 0x25: DABT (current EL)
+  FSC = 0x04: level 0 translation fault
+CPU: 3 PID: 0 Comm: swapper/3 Tainted: G W O
+pc : handle_percpu_devid_irq+0x28/0x120
+x19: ffffff8001040a00   x1 : ffffffc080b50428   x0 : 7fffffc080b5c5b8
+```
+
+Compare with the September capture:
+
+| | September | this one |
+|---|---|---|
+| fault VA | `7fffff807fc195b8` | `7fffff807fc195b8` — identical |
+| ESR / EC / FSC | `0x96000004` / `0x25` / `0x04` | identical |
+| `pc` | `handle_percpu_devid_irq+0x28` | identical |
+| CPU / process | CPU 3, `swapper/3` | CPU 3, `swapper/3` |
+| `x0` = `desc->kstat_irqs` (corrupted) | `7fffffc080b5c5b8` | `7fffffc080b5c5b8` — **byte-identical** |
+| `x1` | `ffffffc080b50428` | `ffffffc080b50428` — identical |
+| `x4`/`x17` = TPIDR_EL1 = `__per_cpu_offset[3]` | `ffffffbfff0bd000` | `ffffffbfff0bd000` — identical |
+| `x19` = `desc` | `ffffff8001041e00` | `ffffff8001040a00` — **differs** |
+
+Two readings matter here:
+
+* The **corrupted value is bit-for-bit reproducible** a month apart. That is not what a
+  single marginal DRAM cell looks like on its own, because the *field itself moved*
+  (`desc` differs by `0x1400`, so `desc+104` is not the same address), yet both copies
+  read back the same bit-63-cleared pointer. A per-cell retention failure would have to
+  relocate itself along with the allocation.
+* It reproduces on **CPU 3** in both cases, with the same per-CPU offset, in the same
+  idle state.
+
+The value is reproducible because the per-CPU area, the IRQ numbers and the
+allocation order are all deterministic without KASLR: `desc->kstat_irqs` for the
+arch-timer IRQ is the same logical pointer on every boot, so "the same pointer gets
+its top bit cleared" is the expected signature whether the cause is marginality,
+a wild DMA write, or a systematic truncated store. This is therefore **not** by itself
+enough to separate those three, and the fix below is aimed at the one that is both
+proven different from stock and under this repository's control.
+
+### Residual uncertainty, and how it gets settled
+
+The overclock is confirmed to be a real, measured deviation from the vendor
+configuration (see below), so removing it is correct regardless. It does not,
+however, *prove* that no other agent (a weak DRAM cell, `airoha_npu` or `mt7996e`
+DMA) contributes. The two are separable by observation, and the machinery to do it
+is now installed on the device:
+
+* every boot appends one line to `/etc/w1700k-crashlog/events.log` recording whether a
+  panic dump was found and how long the previous boot survived,
+* the full dump is preserved, so a recurrence can be compared against the three
+  captures above,
+* `/tmp/w1700k-heartbeat.log` gives a one-minute heartbeat while running.
+
+If the board keeps crashing with the **same** signature after the governor fix, the
+undervolt was not the whole story and the next suspects are the OOT DMA writers
+(`airoha_npu`, `mt7996e`), which can then be disabled for an A/B soak test.
+
 ## Root cause: `ubi2-oc` is a uniform undervolt, not a clock bump
 
 Upstream `OpenWRT-fanboy/OpenW1700k@ubi2-oc` HEAD is:
@@ -296,11 +361,32 @@ keeping panic dumps only in tmpfs, its `crontab` was empty (the September monito
 had been lost), and `/etc/rc.local` copied dumps to `/tmp` — so a reboot left nothing
 behind to analyse.
 
+### Verified live on the affected board
+
+The same files were pushed to the running router and applied with
+`/etc/init.d/w1700k-cpufreq start`, before the rebuilt image was available:
+
+```
+uci get w1700k.cpufreq.governor   -> ondemand
+uci get w1700k.cpufreq.max_freq   -> 1200000
+w1700k-cpufreq: policy0: scaling_max_freq -> 1200000 kHz
+w1700k-cpufreq: policy0: scaling_governor -> ondemand
+w1700k-cpufreq: policy0: governor=ondemand cur=1200000 min=700000 max=1200000
+# 8 seconds later, with the router idle:
+cur=700000
+```
+
+The core now drops to 700 MHz when idle instead of being pinned at 1400 MHz, which is
+the state both panics were taken in. `w1700k-crashlog` preserved the third panic dump
+into `/etc/w1700k-crashlog/20261015-132259/` on its first run and installed the
+heartbeat cron job.
+
 ### Expected effect
 
 `ondemand` lets an idle router drop to 700 MHz instead of being pinned at 1400 MHz,
-removing the condition under which both panics occurred. The `max_freq` cap in the OC
-profile additionally keeps load bursts off the top two OPPs.
+removing the condition under which the panics occurred. The `max_freq` cap in the OC
+profile additionally keeps load bursts off the top two OPPs. See "Residual
+uncertainty" above for what to watch.
 
 ### Recommendation
 
