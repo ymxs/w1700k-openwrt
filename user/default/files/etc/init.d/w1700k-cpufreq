@@ -14,9 +14,22 @@ STOP=81
 CFG=w1700k
 TAG=w1700k-cpufreq
 
+# The single property this script exists to guarantee: the board must never be
+# left on the "performance" governor, because that is the state the random
+# panics were traced to. Everything else is best effort.
+DEFAULT_GOVERNOR=ondemand
+
 msg() {
 	logger -t "$TAG" "$*"
 	echo "$TAG: $*"
+}
+
+# Read one option, tolerating either a named 'cpufreq' section or an anonymous
+# one (a section name != type is an easy way to silently lose the settings).
+cfg_get() {
+	_v="$(uci -q get "$CFG.cpufreq.$1" 2>/dev/null)"
+	[ -n "$_v" ] || _v="$(uci -q get "$CFG.@cpufreq[0].$1" 2>/dev/null)"
+	echo "$_v"
 }
 
 # Highest available frequency that is <= $2.
@@ -47,9 +60,13 @@ apply_policy() {
 	[ -d "$_p" ] || return 0
 
 	_name="$(basename "$_p")"
-	_gov="$(uci -q get $CFG.cpufreq.governor)"
-	_maxf="$(uci -q get $CFG.cpufreq.max_freq)"
-	_minf="$(uci -q get $CFG.cpufreq.min_freq)"
+	_gov="$(cfg_get governor)"
+	_maxf="$(cfg_get max_freq)"
+	_minf="$(cfg_get min_freq)"
+
+	# Missing config must not mean "no protection".
+	[ -n "$_gov" ] || _gov="$DEFAULT_GOVERNOR"
+
 	_avail=" $(cat "$_p/scaling_available_governors" 2>/dev/null) "
 
 	# Frequency limits first, so the governor starts inside the new window.

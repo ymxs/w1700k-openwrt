@@ -2,7 +2,7 @@
 #
 # Consumed by /etc/init.d/w1700k-cpufreq on every boot.
 
-config cpufreq 'main'
+config cpufreq 'cpufreq'
 	# CPU frequency governor to enforce.
 	#
 	# The stock "ubi2" branch already defaults to ondemand. The "ubi2-oc"

@@ -15,7 +15,7 @@
 # These settings keep the extra headroom reachable but stop the board from
 # sitting in the most marginal part of the curve by default.
 
-config cpufreq 'main'
+config cpufreq 'cpufreq'
 	# Never leave the "performance" governor in place: it holds all cores at
 	# the top OPP 24/7, which is precisely the undervolted worst case.
 	option governor 'ondemand'
