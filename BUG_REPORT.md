@@ -395,3 +395,110 @@ voltage-correct — capping only reduces how marginal it gets. For a board that 
 already produced two panics, the standard **`ubi2`** image is the right daily driver: the
 same silicon at the voltages the firmware was designed for. The OC profile is kept for
 users who want it, now with the governor fixed.
+
+---
+
+# Bug 5 — `cache_rr=ALIAS` puts dnsmasq in a crash loop (no DHCP, no DNS)
+
+**Status: FIXED & VERIFIED.** Reported 2026-10-16 as "after flashing, my phone
+cannot connect on 5 GHz — it never gets an IP address, while the 2.4 GHz IoT
+devices are fine".
+
+## Symptom, and why it looks like a Wi-Fi fault
+
+The report describes a 5 GHz association problem, but the 5 GHz side was
+completely healthy:
+
+```
+phy0.1-ap0: ACS-COMPLETED freq=5500 channel=100
+phy0.1-ap0: DFS-CAC-COMPLETED success=1 ... radar_detected=0 cac_time=60s
+phy0.1-ap0: interface state DFS->ENABLED
+phy0.1-ap0: AP-ENABLED
+Station 40:9f:38:a6:96:c5 (on phy0.1-ap0)  tx bitrate: 780.0 MBit/s VHT-MCS 9 80MHz
+```
+
+The real fault was in the DHCP/DNS layer:
+
+```
+procd: Instance dnsmasq::cfg01411c s in a crash loop 12 crashes, 0 seconds since last crash
+dnsmasq: bad RR type at line 15 of /var/etc/dnsmasq.conf.cfg01411c
+dnsmasq: FAILED to start up
+```
+
+with `/tmp/dhcp.leases` empty and nothing listening on UDP port 67. That produces
+exactly the reported asymmetry: **clients that already hold a lease keep working
+(the 2.4 GHz IoT devices), while anything that connects afterwards cannot obtain
+an address** — and because the obvious symptom is "phone won't join the Wi-Fi",
+the fault is naturally blamed on the radio.
+
+## Root cause
+
+Line 15 of the generated config was `cache-rr=ALIAS`.
+
+`dhcp.@dnsmasq[0].cache_rr` is written by **luci-mod-network's DHCP/DNS page**
+(Network → DHCP and DNS), whose record type list lives in
+`view/network/dns.js`:
+
+```js
+const recordtypes = ['ANY','A','AAAA','ALIAS','CAA','CERT','CNAME', ... ,'URI',]
+```
+
+`ALIAS` is a dnsmasq-internal pseudo-RR and is **not** accepted by `--cache-rr`
+in dnsmasq 2.93. Verified per-type on the device: of the 27 entries in that
+array, `ALIAS` is the *only* one dnsmasq refuses:
+
+```
+OK   ANY      OK   A        OK   AAAA     BAD  ALIAS -> dnsmasq: bad RR type
+OK   CAA      OK   CERT     OK   CNAME    OK   DS      ...   OK   URI
+```
+
+So merely saving that LuCI page wrote a value that makes dnsmasq refuse to
+start. procd retried a handful of times, declared a crash loop and gave up, and
+the box ran indefinitely with no DHCP server and no resolver. The log also
+shows the config later being rewritten without `ALIAS` (OpenClash manages
+`cache_rr` too, and writes its own valid list) — but procd had already given
+up, so it stayed down until dnsmasq was restarted by hand.
+
+## Fix
+
+| # | Change | Role |
+|---|---|---|
+| 1 | `custom.sh` strips `'ALIAS'` from `recordtypes[]` in feeds' `luci-mod-network/.../network/dns.js` | Root cause: the UI can no longer write an unsupported type. Deliberately non-fatal, since #2 is what guarantees a working resolver |
+| 2 | new `etc/init.d/w1700k-dnsmasq-guard`, `START=18` (dnsmasq is `S19`) | Safety net: every `cache_rr` entry is validated **by asking dnsmasq itself** and the rejected ones are dropped, so an already-broken or restored config repairs itself at boot |
+
+Validating with `dnsmasq --test` rather than a hard-coded list means the guard
+keeps working if the supported type set changes, and it costs one `--test` call
+in the normal (all-valid) case.
+
+### Verification
+
+Injecting the bad entry on the running board and running the guard:
+
+```
+# uci add_list dhcp.@dnsmasq[0].cache_rr='ALIAS'; uci commit dhcp
+injected -> ANY A AAAA CNAME SRV ALIAS
+# /etc/init.d/w1700k-dnsmasq-guard start
+w1700k-dnsmasq-guard: dnsmasq rejects these cache_rr types, removing them: ALIAS
+w1700k-dnsmasq-guard: dhcp config repaired (cache_rr now: ANY A AAAA CNAME SRV)
+```
+
+and the service itself, after `/etc/init.d/dnsmasq restart`:
+
+```
+dnsmasq: syntax check OK.
+udp  0  0 0.0.0.0:67  0.0.0.0:*  27165/dnsmasq
+9 leases in /tmp/dhcp.leases, including the reporting phone
+```
+
+## If it ever happens again
+
+```
+/etc/init.d/dnsmasq restart          # brings DHCP/DNS back immediately
+/etc/init.d/w1700k-dnsmasq-guard start   # repairs the config that broke it
+dnsmasq --test -C /var/etc/dnsmasq.conf.cfg01411c
+```
+
+`logread -e dnsmasq` shows the offending line number if a different option is
+to blame.
+
+

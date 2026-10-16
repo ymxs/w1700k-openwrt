@@ -117,6 +117,7 @@ honk 真实 datapath 需要内核 ≥ 6.12（本固件为 6.18）以及 BTF / cg
 
 - **CI 编译失败**：已修复 — 上游 `OpenW1700k@ubi2` force-push 导致 `998-flowsense-i18n.patch` 无法应用；已在 `c3b007a` 重新适配，CI run #22 全绿，两个固件 Release 已发布。
 - **随机重启**：**根因已确认并已修复** — `ubi2-oc` 超频分支并非单纯提高频率，而是把 PM-domain 的 PLL 公式从 `500 + state*50` 改成 `700 + state*50`，同时把 DTS 的 OPP 表整体上移 200 MHz，**但 ATF 的电压表没有同步提高**。结果是**每一个频率都在跑「低 200 MHz 档位的电压」= 全程欠压**；又叠加该分支把默认 governor 改成 `performance`，把 4 核永久钉在 1.4 GHz / 欠压上。欠压在这种最边缘状态下产生随机单比特内存翻转，内核在 arch timer tick 路径上读到被破坏的指针后 panic — 即「无故重启」。详见 [BUG_REPORT.md](BUG_REPORT.md) 的 2026-10-15 更新。
+- **设备连不上、拿不到 IP（但老设备正常）**：已修复 — 不是 WiFi 问题。LuCI 的「网络 → DHCP/DNS」页面里的 `recordtypes` 列表含 `ALIAS`，而这个类型 dnsmasq 2.93 不接受（`bad RR type`），于是 dnsmasq 起不来、进入 procd 崩溃循环，**整个 LAN 的 DHCP 与 DNS 全挂**。已持有租约的老设备照常工作，新连上来的设备就卡在「正在获取 IP 地址」。详见 [BUG_REPORT.md](BUG_REPORT.md) 的 Bug 5。
 - 次要问题：`system info` localtime 偏差 +8 小时（时区被应用两次）；lan2 链路约每 5–6 分钟闪断一次。
 
 ---
@@ -132,6 +133,7 @@ honk 真实 datapath 需要内核 ≥ 6.12（本固件为 6.18）以及 BTF / cg
 | `ubi2-oc` 专属覆盖 | `governor=ondemand` + `max_freq=1200000`，不再停留在最激进的两个超频档位 |
 | `/etc/init.d/w1700k-crashlog` | 每次开机把 `/sys/fs/pstore` 里幸存的 panic 转储复制到**持久化**的 `/etc/w1700k-crashlog/`，并在 `events.log` 追加一行记录上一轮开机撑到多少秒才崩 |
 | `/usr/sbin/w1700k-heartbeat` | 每分钟心跳，写在 `/tmp`（内存），几乎不增加 flash 擦写 |
+| `/etc/init.d/w1700k-dnsmasq-guard` | 开机（S18，早于 dnsmasq 的 S19）校验 dnsmasq 配置，自动移除它不接受的 `cache_rr` 类型 |
 
 想恢复完整 1.4 GHz 超频：`uci set w1700k.cpufreq.max_freq=1400000 && uci commit w1700k && /etc/init.d/w1700k-cpufreq restart`
 
@@ -148,4 +150,22 @@ logread -e w1700k-cpufreq          # 查看当前 governor / 频率是否已生�
 cat /etc/w1700k-crashlog/events.log # 每次重启一行：CRASH(上一轮撑了多久) / BOOT
 ls /etc/w1700k-crashlog/            # 完整 panic 转储（含寄存器与调用栈）
 tail -20 /tmp/w1700k-heartbeat.log  # 最近一分钟级心跳
+```
+
+---
+
+## 🚑 常见故障速查
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 新设备连上 WiFi 但一直「正在获取 IP 地址」，老设备正常 | dnsmasq 配置非法 → 崩溃循环 → 无 DHCP/DNS | `dnsmasq --test -C /var/etc/dnsmasq.conf.cfg01411c`；`/etc/init.d/w1700k-dnsmasq-guard start`；`/etc/init.d/dnsmasq restart` |
+| 网页保存「网络 → DHCP/DNS」后就断网 | 同上（`cache_rr` 被写入 `ALIAS`） | 同上；本固件已从 LuCI 列表移除该类型 |
+| 重启过于频繁 | 见上文调频部分 | `logread -e w1700k-cpufreq` 确认 governor 为 `ondemand` |
+
+排查 dnsmasq 是否活着，一条命令即可：
+
+```sh
+dnsmasq --test -C /var/etc/dnsmasq.conf.cfg01411c   # 配置是否合法
+netstat -lnup | grep ':67'                          # DHCP 是否在监听
+wc -l /tmp/dhcp.leases                              # 有没有在下发租约
 ```
