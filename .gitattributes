@@ -1,4 +1,14 @@
-# Overlay files are copied verbatim onto the device. CRLF would break shell
-# shebangs and UCI config parsing, so disable all end-of-line translation and
-# store every file byte-for-byte as committed.
-* -text
+# Everything here is copied verbatim onto the device or consumed by the build,
+# so it must never contain CRLF: a CR in a shell script breaks its shebang and
+# stops 'then'/'fi' from being recognised as keywords, and CRs in the patches,
+# feeds.conf and config.diff are just as fatal.
+#
+# text=auto + eol=lf makes git normalise every text file to LF in the
+# repository and check it out as LF, so an edit made on Windows cannot
+# reintroduce CRLF into a committed blob. Binary files are detected
+# automatically and left untouched.
+#
+# Note: 'eol=lf' also means the working tree is LF, so a CRLF copy cannot be
+# created by git in the first place - which is what let a plain edit silently
+# turn custom.sh into a CRLF blob and break the build.
+* text=auto eol=lf
