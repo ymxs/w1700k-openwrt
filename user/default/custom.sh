@@ -31,6 +31,36 @@ mkdir -p feeds/luci/modules/luci-mod-status/patches
 cp -f $DK_PROFILE/patches/998-single-wiphy.patch \
     feeds/luci/modules/luci-mod-status/patches/998-single-wiphy.patch
 
+# -------------------------------------------------
+# dnsmasq: do not let LuCI write a cache_rr type dnsmasq rejects
+#
+# luci-mod-network's DHCP/DNS page builds its "Cache RR" selector from
+# recordtypes[] in view/network/dns.js, and that array contains 'ALIAS'.
+# dnsmasq 2.93 answers "bad RR type" for it and refuses to start, so merely
+# saving that page writes a config that kills DHCP and DNS for the whole LAN:
+# clients that already hold a lease keep working while anything connecting
+# afterwards is stuck at "obtaining IP address" - which looks like a Wi-Fi
+# fault but is not.
+#
+# Best effort and deliberately non-fatal: the S18 w1700k-dnsmasq-guard init
+# script repairs an already-written config on the device, so a moved or
+# reformatted feed file only costs the UI-side prevention.
+LUCI_DNS_JS=feeds/luci/modules/luci-mod-network/htdocs/luci-static/resources/view/network/dns.js
+if [ -f "$LUCI_DNS_JS" ]; then
+    if grep -q "'ALIAS'" "$LUCI_DNS_JS"; then
+        sed -i "s/'ALIAS',//" "$LUCI_DNS_JS"
+        if grep -q "'ALIAS'" "$LUCI_DNS_JS"; then
+            echo "::warning::could not strip 'ALIAS' from $LUCI_DNS_JS"
+        else
+            echo "luci-mod-network: dropped 'ALIAS' from the DNS RR type list"
+        fi
+    else
+        echo "luci-mod-network: no 'ALIAS' RR type present (already fixed upstream?)"
+    fi
+else
+    echo "::warning::$LUCI_DNS_JS not found; skipped the ALIAS fix"
+fi
+
 if [ ! -d package/luci-app-wifi7 ]; then
     echo "ERROR: luci-app-wifi7 missing" >&2
     exit 1

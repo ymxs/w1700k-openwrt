@@ -38,6 +38,16 @@ save_dumps() {
 	done
 	[ "$_present" = 1 ] || return 1
 
+	# A ramoops record survives until the next crash overwrites it, so an
+	# unchanged record has already been collected on an earlier boot.
+	# Re-reporting it as a crash every boot would fabricate crash statistics
+	# (and hide whether a new panic actually happened).
+	_fp="$(cat /sys/fs/pstore/dmesg-ramoops-* 2>/dev/null | md5sum | cut -d' ' -f1)"
+	if [ -n "$_fp" ] && [ "$_fp" = "$(cat "$CRASHDIR/.last-dump.md5" 2>/dev/null)" ]; then
+		msg "panic dump unchanged since it was last collected; not a new crash"
+		return 2
+	fi
+
 	_stamp="$(date '+%Y%m%d-%H%M%S')"
 	_d="$CRASHDIR/$_stamp"
 	mkdir -p "$_d" 2>/dev/null
@@ -56,6 +66,8 @@ save_dumps() {
 		[ -n "$_v" ] && LAST_UPTIME="$_v"
 	done
 
+	[ -n "$_fp" ] && printf '%s\n' "$_fp" > "$CRASHDIR/.last-dump.md5"
+
 	DUMPDIR="$_d"
 	msg "panic dump saved to $_d (previous boot reached ${LAST_UPTIME:-unknown}s)"
 	return 0
@@ -66,6 +78,10 @@ log_event() {
 	if [ -n "$DUMPDIR" ]; then
 		printf '%s  CRASH  previous_uptime=%ss  dump=%s\n' \
 			"$(date '+%Y-%m-%d %H:%M:%S %Z')" "${LAST_UPTIME:-?}" "$DUMPDIR" \
+			>> "$CRASHDIR/events.log"
+	elif [ "$SAVE_RC" = 2 ]; then
+		printf '%s  BOOT   rebooted with no new panic (previous dump already collected)\n' \
+			"$(date '+%Y-%m-%d %H:%M:%S %Z')" \
 			>> "$CRASHDIR/events.log"
 	else
 		printf '%s  BOOT   no panic dump (clean start)\n' \
@@ -106,7 +122,9 @@ install_heartbeat() {
 start() {
 	DUMPDIR=""
 	LAST_UPTIME=""
-	save_dumps || true
+	# save_dumps: 0 = new dump collected, 1 = no dump, 2 = already collected
+	SAVE_RC=0
+	save_dumps || SAVE_RC=$?
 	log_event
 	install_heartbeat
 }

@@ -14,4 +14,9 @@
 /etc/init.d/w1700k-crashlog enable 2>/dev/null
 /etc/init.d/w1700k-crashlog start 2>/dev/null
 
+# Must run before /etc/init.d/dnsmasq (S19): repairs a cache_rr entry that
+# would otherwise put dnsmasq into a crash loop and take DHCP/DNS down.
+/etc/init.d/w1700k-dnsmasq-guard enable 2>/dev/null
+/etc/init.d/w1700k-dnsmasq-guard start 2>/dev/null
+
 exit 0

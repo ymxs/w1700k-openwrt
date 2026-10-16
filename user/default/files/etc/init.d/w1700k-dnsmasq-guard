@@ -1,0 +1,99 @@
+#!/bin/sh /etc/rc.common
+#
+# W1700K dnsmasq config guard.
+#
+# dnsmasq refuses to start if dhcp.@dnsmasq[0].cache_rr contains an RR type it
+# does not recognise ("bad RR type at line N"), and procd then gives up after
+# a handful of retries - the instance lands in a crash loop and stays dead.
+# The visible symptom is severe and misleading: the Wi-Fi association works
+# fine, but nothing can obtain a DHCP lease or resolve a name, so clients that
+# already hold a lease keep working while any newly connecting device is stuck
+# at "obtaining IP address".
+#
+# The known trigger on this image is 'ALIAS': luci-mod-network's DHCP/DNS page
+# lists it in the "Cache RR" selector, so saving that page writes an entry
+# dnsmasq 2.93 rejects. custom.sh strips ALIAS from the LuCI list, and this
+# guard is the safety net: it validates every cache_rr entry against the
+# installed dnsmasq before dnsmasq starts, and removes the ones it refuses.
+#
+# Validation is done by asking dnsmasq itself, so it keeps working if the
+# supported type set changes; no hard-coded list to maintain.
+#
+# Runs at S18, i.e. before /etc/init.d/dnsmasq (S19).
+#
+
+START=18
+
+TAG=w1700k-dnsmasq-guard
+TMPCONF=/tmp/.dnsmasq-guard.conf
+
+msg() {
+	logger -t "$TAG" "$*"
+	echo "$TAG: $*"
+}
+
+# Returns 0 when dnsmasq accepts an entry on its own.
+rr_ok() {
+	printf 'cache-rr=%s\n' "$1" > "$TMPCONF"
+	dnsmasq --test -C "$TMPCONF" >/dev/null 2>&1
+}
+
+sanitize_cache_rr() {
+	_rr="$(uci -q get dhcp.@dnsmasq[0].cache_rr)"
+	[ -n "$_rr" ] || return 0
+
+	# Fast path: the whole list is acceptable, which is the normal case.
+	: > "$TMPCONF"
+	for _t in $_rr; do printf 'cache-rr=%s\n' "$_t" >> "$TMPCONF"; done
+	if dnsmasq --test -C "$TMPCONF" >/dev/null 2>&1; then
+		rm -f "$TMPCONF"
+		return 0
+	fi
+
+	_keep=""
+	_bad=""
+	for _t in $_rr; do
+		if rr_ok "$_t"; then
+			_keep="$_keep $_t"
+		else
+			_bad="$_bad $_t"
+		fi
+	done
+	rm -f "$TMPCONF"
+
+	[ -n "$_bad" ] || return 0
+
+	msg "dnsmasq rejects these cache_rr types, removing them:$_bad"
+	uci -q delete dhcp.@dnsmasq[0].cache_rr
+	for _t in $_keep; do
+		uci -q add_list "dhcp.@dnsmasq[0].cache_rr=$_t"
+	done
+	if uci -q commit dhcp; then
+		msg "dhcp config repaired (cache_rr now:${_keep:-<empty>})"
+	else
+		msg "FAILED to commit the repaired dhcp config"
+	fi
+}
+
+# Independent of cache_rr: if the generated config is already broken for some
+# other reason, say so rather than leaving a silently dead resolver behind.
+report_state() {
+	_cfg=/var/etc/dnsmasq.conf.cfg01411c
+	[ -f "$_cfg" ] || return 0
+	if ! dnsmasq --test -C "$_cfg" >/dev/null 2>&1; then
+		msg "WARNING: generated dnsmasq config still fails validation: $(dnsmasq --test -C "$_cfg" 2>&1)"
+	fi
+}
+
+start() {
+	command -v dnsmasq >/dev/null 2>&1 || {
+		msg "dnsmasq not installed, nothing to do"
+		return 0
+	}
+	sanitize_cache_rr
+	report_state
+}
+
+stop() {
+	return 0
+}
