@@ -109,29 +109,46 @@ CONFIG_PACKAGE_wpad-openssl=y
 # CONFIG_SIGN_EACH_PACKAGE is not set
 # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
 
-# ===== OpenClash (luci-app-openclash) 及其依赖 =====
-# 主包
-CONFIG_PACKAGE_luci-app-openclash=y
-# OpenClash 是 Lua 应用，必须引入 LuCI 的 Lua 兼容运行时
-CONFIG_PACKAGE_luci-compat=y
-CONFIG_PACKAGE_luci-lua-runtime=y
-# Makefile DEPENDS 显式要求的依赖（curl 原配置已有）
-# dnsmasq-full 通过 PROVIDES 取代默认 dnsmasq，需显式关掉默认变体
+# ===== nikki (mihomo / Clash.Meta) transparent proxy =====
+# 内核与界面包来自 nikkinikki-org/OpenWrt-nikki feed，在 user/default/feeds.conf
+# 里以 src-git 接入。该文件在 CI 中被复制成 feeds.conf.default，早于
+# scripts/feeds update/install 执行，所以 feed 能被正常解析（在 custom.sh
+# 阶段再 clone 到 package/ 已经太晚，这也是为什么 Aurora/OpenClash 过去用
+# package/ 方式接入，而 feed 类项目必须写进 feeds.conf）。
+# mihomo-meta 用 OpenWrt 的 Go 工具链从源码编译，GO_PKG_TAGS=with_gvisor，
+# TUN 模式可用；与 mihomo-alpha 互斥。
+# mihomo 即 Clash Verge Rev / ClashX Meta / mihomo-party 使用的同一个内核。
+CONFIG_PACKAGE_nikki=y
+CONFIG_PACKAGE_luci-app-nikki=y
+CONFIG_PACKAGE_luci-i18n-nikki-zh-cn=y
+CONFIG_PACKAGE_mihomo-meta=y
+# CONFIG_PACKAGE_mihomo-alpha is not set
+# 依赖：nikki / mihomo-meta Makefile 的 DEPENDS。
+# curl 在基础配置里已有（上方），此处不重复；libuci-lua / liblua 在 iStore
+# 段落勾选，也不重复。
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_yq=y
+CONFIG_PACKAGE_ip-full=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_kmod-nft-socket=y
+CONFIG_PACKAGE_kmod-nft-tproxy=y
+CONFIG_PACKAGE_kmod-inet-diag=y
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_kmod-dummy=y
+CONFIG_PACKAGE_kmod-nft-core=y
+# dnsmasq-full 通过 PROVIDES 取代默认 dnsmasq，需显式关掉默认变体；
+# nftset 让 dnsmasq 能经由 nft sets 参与分流，nftables-json 供 LuCI 防火墙页用。
 # CONFIG_PACKAGE_dnsmasq is not set
 CONFIG_PACKAGE_dnsmasq-full=y
-CONFIG_PACKAGE_bash=y
-CONFIG_PACKAGE_ca-bundle=y
-CONFIG_PACKAGE_ip-full=y
-CONFIG_PACKAGE_ruby=y
-CONFIG_PACKAGE_ruby-yaml=y
-CONFIG_PACKAGE_kmod-tun=y
-CONFIG_PACKAGE_unzip=y
-# Makefile config 段在 firewall4 下自动 default y 的项，显式写出更稳妥
-CONFIG_PACKAGE_kmod-inet-diag=y
-CONFIG_PACKAGE_kmod-nft-tproxy=y
 CONFIG_PACKAGE_dnsmasq_full_nftset=y
 CONFIG_PACKAGE_nftables-json=y
-# ===== OpenClash 依赖结束 =====
+# LuCI 是 Lua 应用，必须引入 LuCI 的 Lua 兼容运行时（iStore 同样需要）
+CONFIG_PACKAGE_luci-compat=y
+CONFIG_PACKAGE_luci-lua-runtime=y
+# 脚本 / 工具类
+CONFIG_PACKAGE_bash=y
+CONFIG_PACKAGE_unzip=y
+# ===== nikki dependency end =====
 
 # ===== iStore 应用商店 (luci-app-store) =====
 # 本固件 CONFIG_USE_APK=y（default y），iStore 会据此自动选用 apk 分支
@@ -160,7 +177,7 @@ CONFIG_PACKAGE_procd=y
 # propagates that conditional requirement into every package selecting tar, so
 # defconfig drops luci-app-store unless xz-utils is selected as well.
 CONFIG_PACKAGE_xz-utils=y
-# luci-compat / curl 已在 OpenClash 段落勾选，iStore 同样需要，不重复添加
+# luci-compat / curl / luci-lua-runtime 已在 nikki 段落勾选，iStore 同样需要，不重复添加
 # ===== iStore 依赖结束 =====
 
 # ===== iStoreOS integration (istoreos-25.12) =====
@@ -177,27 +194,3 @@ CONFIG_PACKAGE_dkml=y
 # LuCI OTA firmware flashing app (iStoreOS diy package; curl already selected)
 CONFIG_PACKAGE_luci-app-ota=y
 # ===== iStoreOS integration end =====
-
-# ===== honk integration start =====
-# honk eBPF datapath 所需的内核能力。以下 CONFIG_KERNEL_* 会被
-# kernel-defaults.mk 剥掉 KERNEL_ 前缀后追加进内核 .config，并覆盖
-# target/generic 里默认关闭的 DEBUG_INFO / BTF / NAMESPACES / CGROUPS。
-# 注意：BTF 依赖 !DEBUG_INFO_REDUCED，而 OpenWrt 的 DEBUG_INFO_REDUCED
-# 默认为 y，所以必须显式写成 "is not set"。
-CONFIG_KERNEL_DEBUG_INFO=y
-CONFIG_KERNEL_DEBUG_INFO_BTF=y
-# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
-CONFIG_KERNEL_CGROUPS=y
-CONFIG_KERNEL_CGROUP_BPF=y
-CONFIG_KERNEL_NAMESPACES=y
-CONFIG_KERNEL_NET_NS=y
-# honk 包本体，以及它 DEPENDS 依赖的内核模块（sched/ingress、cls-bpf、
-# veth、nft-queue）。kmod-nft-queue 会自动带入 kmod-nft-core（nft_ct）
-# 与 kmod-nfnetlink-queue（NETFILTER_NETLINK_QUEUE）。
-CONFIG_PACKAGE_honk=y
-CONFIG_PACKAGE_kmod-sched-core=y
-CONFIG_PACKAGE_kmod-sched-bpf=y
-CONFIG_PACKAGE_kmod-veth=y
-CONFIG_PACKAGE_kmod-nft-core=y
-CONFIG_PACKAGE_kmod-nft-queue=y
-# ===== honk integration end =====

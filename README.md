@@ -25,7 +25,7 @@
 | 组件 | 来源 | 说明 |
 | --- | --- | --- |
 | `user/default/feeds.conf` | jjm2473/packages、jjm2473/luci（`istoreos-25.12`）、openwrt/routing、jjm2473/openwrt-third | CI 中替换基线仓库默认 feeds，提供完整 iStoreOS 软件包生态（含 `luci-theme-argon`、`luci-app-argon-config`） |
-| iStoreOS 内置包 | istoreos/istoreos（`istoreos-25.12` 分支）的 `package/istoreos-files` 与 `package/diy/{dkml,luci-app-ota}` | 构建时由 `custom.sh` 克隆并拷入源码树（与 Aurora / OpenClash / iStore 商店相同方式，版本锁定在 istoreos-25.12） |
+| iStoreOS 内置包 | istoreos/istoreos（`istoreos-25.12` 分支）的 `package/istoreos-files` 与 `package/diy/{dkml,luci-app-ota}` | 构建时由 `custom.sh` 克隆并拷入源码树（与 Aurora 主题相同方式，版本锁定在 istoreos-25.12） |
 
 首次启动行为：
 
@@ -87,27 +87,42 @@ W1700K-OpenWrt-OC_<构建时间>_r<版本号>
 
 ---
 
-## 🧪 honk（eBPF 透明代理，实验性）
+## 🌐 透明代理：nikki + mihomo（Clash.Meta）
 
-固件已内置 [honk](https://github.com/daeuniverse/honk) —— 基于 eBPF 的透明代理（dae 血统，sing-box 风格出站组 + Clash 兼容 API），版本 **v0.0.1.beta.84**（上游预编译 aarch64 musl 二进制，已内嵌 eBPF object）。
+**OpenClash 与 honk 已从本固件中移除**，替换为 [nikki](https://github.com/nikkinikki-org/OpenWrt-nikki)
+驱动的 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash.Meta）—— 也就是 Clash Verge Rev /
+ClashX Meta / mihomo-party 等客户端所使用的同一个内核。
 
-- **默认状态**：开机自启；但默认配置为 `direct-only`（`fallback: direct`），**不改变任何流量路径**，仅用于验证 datapath 能正常起来。
-- **配置文件**：`/etc/honk/config.dae`（OpenWrt conffile，sysupgrade 会保留本地修改）
-- **服务控制**：`/etc/init.d/honk {start|stop|restart|reload|enable|disable}`
-- **Clash API**：`127.0.0.1:9091`，external-ui 为 `yacd`
-  - 端口特意避让已内置的 OpenClash（9090）
-  - ⚠️ honk 与 OpenClash **同为透明代理，请勿同时运行**，切换前请先停用另一个
-- **运行时**：数据目录 `/var/lib/honk`；eBPF map 挂载点 `/sys/fs/bpf`（init 脚本会自动挂载 bpffs）
+- **接入方式**：`src-git nikki` 写在 `user/default/feeds.conf` 里。该文件在 CI 中被复制成
+  `feeds.conf.default`，**早于** `scripts/feeds update/install` 执行，所以 feed 能被正常解析；
+  如果在 `custom.sh` 阶段才 clone 到 `package/` 已经太晚（这正是过去 OpenClash / Aurora 必须
+  走 `package/` 的原因）。
+- **LuCI 界面**：`服务 → Nikki`（中文界面包 `luci-i18n-nikki-zh-cn` 已勾选）
+- **内核**：`/usr/libexec/mihomo`（`/usr/bin/mihomo` 为 alternatives 符号链接），
+  由 `mihomo-meta` 用 OpenWrt Go 工具链从源码编译，`GO_PKG_TAGS=with_gvisor`，TUN 模式可用。
+  与 `mihomo-alpha` 互斥，二选一。
+- **配置**：`/etc/config/nikki`（UCI）；配置文件在 `/etc/nikki/`，订阅落在
+  `/etc/nikki/subscriptions/`
+- **默认行为**：开机自启但**不改变任何流量路径**，需自行添加节点/订阅后才生效
+- **服务控制**：`/etc/init.d/nikki {start|stop|restart|reload|enable|disable}`
 
-### 内核依赖
+### 依赖与内核要求
 
-honk 真实 datapath 需要内核 ≥ 6.12（本固件为 6.18）以及 BTF / cgroup-bpf / netns / sched-bpf / nft-queue 支持。这些已在两个 `config.diff` 中通过 `CONFIG_KERNEL_*` 打开（含 `CONFIG_KERNEL_DEBUG_INFO_BTF=y` 并显式 `# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set`，否则 BTF 无法启用），同时选中对应 `kmod-*`。
+nikki 需要 **firewall4（fw4）**（本固件 OpenWrt 25.12 + 内核 6.18 满足）、`kmod-nft-tproxy`
+（TPROXY）、`kmod-tun`（TUN）、`kmod-nft-socket`、`kmod-dummy`、`kmod-inet-diag`。这些都在两个
+`config.diff` 的 nikki 段落里显式勾选。
 
-### 升级 honk
+随着 honk 一起移除的还有它所需的 `CONFIG_KERNEL_DEBUG_INFO` / `DEBUG_INFO_BTF` / CGROUP_BPF /
+NET_NS 以及 `kmod-sched-*` / `kmod-veth` / `kmod-nft-queue` —— eBPF 已不再是固件能力的一部分，
+内核随之变小。
 
-编辑 `user/default/honk/Makefile` 的 `PKG_VERSION`（不带 `v` 前缀）与 `PKG_HASH`，同步为新版本号的官方 release `sha256`；两者不一致时会在下载校验阶段直接失败。
+### 升级 nikki / mihomo
 
-> honk 仍属 beta（v0.0.1.beta.84），上游 README 明确不建议用于生产环境，请自行评估风险。
+`src-git nikki` 跟踪 `main` 分支，`feeds update` 会自动拉到新版本；mihomo 内核版本则由
+`mihomo-meta/Makefile` 的 `PKG_VERSION` 锁定。要升级内核就 fork 该 feed 并改 `PKG_VERSION`
+与 `PKG_SOURCE_VERSION`，把 `feeds.conf` 指向自己的 fork。若希望内核像 OpenClash 那样在
+**运行时下载**（不烤进固件），需要另行改造 `mihomo-meta` 的 Makefile，去掉 `nikki` 对 `+mihomo`
+的强依赖 —— 当前实现是编译期静态链接进镜像。
 
 ---
 

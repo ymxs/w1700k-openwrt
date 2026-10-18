@@ -146,8 +146,12 @@ jobs:
             echo "::error::luci-app-store not selected after defconfig (iStore integration broken)"
             exit 1
           fi
-          if ! grep -q "^CONFIG_PACKAGE_honk=y" .config; then
-            echo "::error::honk not selected after defconfig (honk integration broken)"
+          if ! grep -q "^CONFIG_PACKAGE_nikki=y" .config; then
+            echo "::error::nikki not selected after defconfig (nikki/mihomo integration broken)"
+            exit 1
+          fi
+          if ! grep -q "^CONFIG_PACKAGE_mihomo-meta=y" .config; then
+            echo "::error::mihomo-meta not selected after defconfig (nikki/mihomo integration broken)"
             exit 1
           fi
           make download -j8 || exit 1
@@ -164,7 +168,9 @@ jobs:
           # seeding build and be silently skipped (no recompile, no ipk). Force-
           # clean every such package first so the freshly cloned/patched sources
           # are actually built and installed into the image.
-          for p in luci-app-store luci-lib-taskd luci-lib-xterm taskd istoreos-files dkml luci-app-ota luci-theme-aurora luci-app-aurora-config luci-app-openclash honk; do
+          # nikki/mihomo/luci-app-nikki come from the nikki feed (feeds/nikki/),
+          # so they are freshly fetched every run and need no force-clean.
+          for p in luci-app-store luci-lib-taskd luci-lib-xterm taskd istoreos-files dkml luci-app-ota luci-theme-aurora luci-app-aurora-config; do
             echo "--- force-clean package/$p (vendored sources) ---"
             make package/$p/clean V=s || echo "::warning::force-clean failed for $p"
           done
@@ -245,7 +251,7 @@ jobs:
         - 构建时间：$(TZ=Asia/Hong_Kong date '+%Y-%m-%d %H:%M:%S %Z')
         - 固件源码：https://github.com/OpenWRT-fanboy/OpenW1700k
         - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
-        - 已内置 honk（eBPF 透明代理 v0.0.1.beta.84）：默认 direct-only 且开机自启；配置文件 \`/etc/honk/config.dae\`，Clash API \`127.0.0.1:9091\`（与 OpenClash 的 9090 不冲突，但两者请勿同时运行）
+        - 已移除 OpenClash 与 honk，改为内置 nikki + mihomo（Clash.Meta）透明代理：LuCI 界面在 `服务 → Nikki`，内核 `/usr/libexec/mihomo`，配置 `/etc/config/nikki`（订阅、分流、外部控制台均在该页面）；默认不改动任何流量路径，需自行添加节点后才生效
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
         请确认设备为 W1700K，并在刷写前备份当前配置。
@@ -261,7 +267,7 @@ jobs:
         - 构建时间：$(TZ=Asia/Hong_Kong date '+%Y-%m-%d %H:%M:%S %Z')
         - 固件源码：https://github.com/OpenWRT-fanboy/OpenW1700k
         - 已整合 iStoreOS（istoreos-25.12）：iStoreOS feeds、files 包与 Argon 风格界面；Aurora 主题仍可用
-        - 已内置 honk（eBPF 透明代理 v0.0.1.beta.84）：默认 direct-only 且开机自启；配置文件 \`/etc/honk/config.dae\`，Clash API \`127.0.0.1:9091\`（与 OpenClash 的 9090 不冲突，但两者请勿同时运行）
+        - 已移除 OpenClash 与 honk，改为内置 nikki + mihomo（Clash.Meta）透明代理：LuCI 界面在 `服务 → Nikki`，内核 `/usr/libexec/mihomo`，配置 `/etc/config/nikki`（订阅、分流、外部控制台均在该页面）；默认不改动任何流量路径，需自行添加节点后才生效
         - 本 Release 仅包含 \`sysupgrade.itb\` 升级镜像。
 
         刷写前请确认设备为 W1700K，并备份当前配置。

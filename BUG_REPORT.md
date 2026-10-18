@@ -459,6 +459,11 @@ shows the config later being rewritten without `ALIAS` (OpenClash manages
 `cache_rr` too, and writes its own valid list) — but procd had already given
 up, so it stayed down until dnsmasq was restarted by hand.
 
+> Note (2026-10-18): OpenClash is no longer part of this firmware — it was
+> removed together with honk and replaced by nikki + mihomo. The incident
+> above is kept as written because it documents the LuCI/dnsmasq bug itself,
+> which is independent of which proxy app happens to be installed.
+
 ## Fix
 
 | # | Change | Role |

@@ -254,36 +254,18 @@ fi
 
 
 # -------------------------------------------------
-# Install OpenClash (luci-app-openclash)
+# Transparent proxy: nikki + mihomo (Clash.Meta)
+#
+# OpenClash and the eBPF-based honk proxy were both removed from this
+# profile. The replacement is mihomo (the Clash.Meta core) driven by
+# nikki, both coming from the nikkinikki-org/OpenWrt-nikki feed that
+# user/default/feeds.conf adds *before* scripts/feeds update/install
+# runs (adding it here in custom.sh would be too late - the feed is
+# already installed by this point, which is exactly why OpenClash and
+# honk had to be cloned into package/ instead).
+#
+# Nothing to do here: the packages are selected in user/*/config.diff.
 # -------------------------------------------------
-
-echo "Installing OpenClash..."
-
-rm -rf package/luci-app-openclash
-
-# OpenClash 仓库根目录下是 luci-app-openclash/ 子目录，克隆后单独取出
-if ! git clone \
-    --depth=1 \
-    https://github.com/vernesong/OpenClash.git \
-    /tmp/openclash-src
-then
-    echo "ERROR: Failed to download OpenClash!"
-    exit 1
-fi
-
-cp -r /tmp/openclash-src/luci-app-openclash package/luci-app-openclash
-rm -rf /tmp/openclash-src
-
-if [ ! -f package/luci-app-openclash/Makefile ]; then
-    echo "ERROR: OpenClash was downloaded, but Makefile is missing!"
-    exit 1
-fi
-
-echo "OpenClash installed successfully."
-
-# 重新扫描包索引，确保 make defconfig 能识别新加入的包
-rm -rf tmp/info 2>/dev/null || true
-rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
@@ -292,7 +274,7 @@ rm -f tmp/.packageinfo 2>/dev/null || true
 # 注意：iStore 官方推荐用 feeds 方式接入（改 feeds.conf.default 后
 # feeds update/install），但本项目 CI 在跑 custom.sh 之前就已经执行完
 # feeds update -a 与 feeds install -a，此时再加 feed 不会生效。
-# 因此这里沿用项目既有的 package/ 克隆方式（与 Aurora 主题、OpenClash 一致）。
+# 因此这里沿用项目既有的 package/ 克隆方式（与 Aurora 主题一致）。
 # iStore 的 Makefile 通过 include $(TOPDIR)/feeds/luci/luci.mk 引用 LuCI，
 # 该文件在 feeds install -a 之后已存在，故克隆到 package/ 下可正常编译。
 #
@@ -399,34 +381,16 @@ rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
-# Install honk (eBPF transparent proxy, daeuniverse/honk)
+# honk was removed
 #
-# honk 是 Rust + eBPF 透明代理（dae 血统，sing-box 风格出站组 +
-# Clash 兼容 API）。上游提供预编译 aarch64 musl 二进制且已内嵌 eBPF
-# object，因此 user/default/honk 只负责下载并校验固定版本的发布二进制，
-# 再包装成 OpenWrt 包 + procd 服务。W1700K 为 aarch64（Airoha AN7581），
-# 与 aarch64-unknown-linux-musl 目标匹配。
-#
-# 真实 datapath 需要内核 >= 6.12（本树构建 6.18）以及 BTF / cgroup-bpf /
-# netns / sched-bpf / nft-queue 支持；这些在 config.diff 里通过
-# CONFIG_KERNEL_* 与 kmod-* 打开，不在这里处理。
+# honk was an eBPF transparent proxy vendored from daeuniverse/honk as a
+# prebuilt aarch64-musl binary, packaged in user/default/honk. It was
+# dropped together with OpenClash in favour of nikki + mihomo (see the
+# transparent-proxy section above). The kernel capabilities it needed
+# (DEBUG_INFO / BTF / cgroup-bpf / netns / sched-bpf / nft-queue) were
+# removed from user/*/config.diff as well, so the eBPF kmods and the
+# BTF-enabled kernel are no longer part of the image.
 # -------------------------------------------------
-
-echo "Installing honk..."
-
-rm -rf package/honk
-cp -r $DK_PROFILE/honk package/honk
-
-if [ ! -f package/honk/Makefile ]; then
-    echo "ERROR: honk package Makefile is missing!" >&2
-    exit 1
-fi
-
-echo "honk installed successfully."
-
-# 重新扫描包索引，确保 make defconfig 能识别 package/honk
-rm -rf tmp/info 2>/dev/null || true
-rm -f tmp/.packageinfo 2>/dev/null || true
 
 
 # -------------------------------------------------
